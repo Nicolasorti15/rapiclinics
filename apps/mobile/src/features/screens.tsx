@@ -24,7 +24,7 @@ import {
 } from "../components/ui";
 import type { Patient, Routes, Scan, Task, Visit } from "../types";
 import { useAction, useAuth, useResource } from "./core";
-import { readBedToken } from "./nfc/reader";
+import { nfcAvailable, readBedToken } from "./nfc/reader";
 import { PatientDrafts } from "./visits/PatientDrafts";
 
 type Props<T extends keyof Routes> = NativeStackScreenProps<Routes, T>;
@@ -202,7 +202,9 @@ export function HomeScreen({ navigation }: Props<"Home">) {
           Tu próxima visita{"\n"}empieza aquí.
         </Text>
         <Text style={styles.heroBody}>
-          Acerca el teléfono a la etiqueta de la cama y confirma al paciente.
+          {nfcAvailable
+            ? "Acerca el teléfono a la etiqueta de la cama y confirma al paciente."
+            : "Selecciona una cama de demostración y confirma al paciente."}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -373,25 +375,29 @@ export function ScanScreen({ navigation }: Props<"Scan">) {
         </View>
       </View>
       <Body muted>
-        Acerca la parte superior del teléfono a la etiqueta NFC de la cama.
+        {nfcAvailable
+          ? "Acerca la parte superior del teléfono a la etiqueta NFC de la cama."
+          : "En esta versión selecciona una cama de demostración. La lectura NFC requiere una compilación nativa propia."}
       </Body>
       {Boolean(action.error) && <Notice error text={action.error} />}
-      <Button
-        title="Leer etiqueta NFC"
-        icon="radio"
-        loading={action.busy}
-        onPress={() =>
-          action.run(async () => {
-            const controller = new AbortController();
-            reading.current = controller;
-            const token = await readBedToken(controller.signal);
-            if (controller.signal.aborted) return;
-            const scan = await api<Scan>("/nfc/resolve", "POST", { token });
-            if (controller.signal.aborted) return;
-            navigation.navigate("Confirm", scan);
-          })
-        }
-      />
+      {nfcAvailable && (
+        <Button
+          title="Leer etiqueta NFC"
+          icon="radio"
+          loading={action.busy}
+          onPress={() =>
+            action.run(async () => {
+              const controller = new AbortController();
+              reading.current = controller;
+              const token = await readBedToken(controller.signal);
+              if (controller.signal.aborted) return;
+              const scan = await api<Scan>("/nfc/resolve", "POST", { token });
+              if (controller.signal.aborted) return;
+              navigation.navigate("Confirm", scan);
+            })
+          }
+        />
+      )}
       {action.busy && (
         <Button
           title="Cancelar lectura"

@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 .expo/
 dist/
+dist-phone/
 .env
 .env.*
 !.env.example

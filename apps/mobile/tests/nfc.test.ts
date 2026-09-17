@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import NfcManager, { NfcTech } from "react-native-nfc-manager";
 import { readBedToken } from "../src/features/nfc/reader.native";
 
+vi.mock("expo-constants", () => ({
+  default: { executionEnvironment: "bare" },
+  ExecutionEnvironment: { StoreClient: "storeClient" },
+}));
+
 vi.mock("react-native-nfc-manager", () => ({
   default: {
     isSupported: vi.fn(),

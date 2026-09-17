@@ -37,7 +37,9 @@ La API usa SQLite local y objetos cifrados en `services/api/data`. Una clave de 
 
 ## Android e iOS
 
-La app utiliza módulos nativos; **Expo Go no es el entorno de prueba**. Crear una development build con EAS o compilar en una máquina preparada:
+Para probar gratis en iPhone con **Expo Go**, ejecutar `INICIAR_EXPO_GO.bat` en Windows y escanear el QR desde el teléfono conectado a la misma red. Esta variante usa selección de cama y no inicializa NFC. [Guía Expo Go](docs/expo-go.md).
+
+Para probar **NFC real**, crear una development build con EAS o compilar en una máquina preparada:
 
 ```powershell
 cd apps/mobile

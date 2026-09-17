@@ -1,6 +1,19 @@
-import NfcManager, { Ndef, NfcTech } from "react-native-nfc-manager";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+
+export const nfcAvailable =
+  Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 export async function readBedToken(signal?: AbortSignal): Promise<string> {
+  if (!nfcAvailable)
+    throw new Error(
+      "En Expo Go selecciona una cama de demostración. NFC requiere la app compilada.",
+    );
+  // Never initialize the missing native NFC module in Expo Go.
+  const {
+    default: NfcManager,
+    Ndef,
+    NfcTech,
+  } = await import("react-native-nfc-manager");
   if (signal?.aborted) throw new Error("Lectura cancelada.");
   if (!(await NfcManager.isSupported()))
     throw new Error(
