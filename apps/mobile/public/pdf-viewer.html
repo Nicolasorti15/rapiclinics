@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDF original · RAPICLINICS</title>
+<style>
+body{margin:0;background:#f6f8fa;color:#172b3a;font:16px system-ui}header{position:sticky;top:0;background:#fff;padding:12px;display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:1px solid #dce5ea;flex-wrap:wrap}button{padding:12px;border:1px solid #176b78;border-radius:8px;background:#fff;color:#176b78;font:inherit;cursor:pointer}button:disabled{opacity:.45;cursor:default}main{overflow:auto;padding:16px;text-align:center}canvas{background:white;max-width:100%;height:auto}#status{padding:12px;text-align:center}details{margin:16px;text-align:left}pre{white-space:pre-wrap;font:inherit}
+</style></head><body>
+<header><button id="prev" disabled>Anterior</button><span id="pages" aria-live="polite">Cargando PDF…</span><button id="next" disabled>Siguiente</button></header>
+<header><button id="zoom-out" aria-label="Reducir PDF" disabled>−</button><span id="zoom" aria-live="polite">100%</span><button id="zoom-in" aria-label="Ampliar PDF">+</button></header>
+<p id="status" role="status">Abriendo el documento original…</p>
+<main><canvas id="page" aria-label="Página del PDF original"></canvas><details><summary>Texto accesible de esta página</summary><pre id="text"></pre></details></main>
+<script type="module">
+import { getDocument, GlobalWorkerOptions } from './pdfjs/build/pdf.mjs';
+GlobalWorkerOptions.workerSrc = './pdfjs/build/pdf.worker.mjs';
+const status = document.querySelector('#status');
+const previous = document.querySelector('#prev');
+const next = document.querySelector('#next');
+let pdf, current = 1;
+let zoom = 1;
+function changeZoom(delta) {
+  zoom = Math.max(1, Math.min(3, zoom + delta));
+  const canvas = document.querySelector('#page');
+  canvas.style.maxWidth = 'none';
+  canvas.style.width = `${zoom * 100}%`;
+  document.querySelector('#zoom').textContent = `${Math.round(zoom * 100)}%`;
+  document.querySelector('#zoom-out').disabled = zoom === 1;
+  document.querySelector('#zoom-in').disabled = zoom === 3;
+}
+document.querySelector('#zoom-out').onclick = () => changeZoom(-0.5);
+document.querySelector('#zoom-in').onclick = () => changeZoom(0.5);
+async function render() {
+  previous.disabled = next.disabled = true;
+  status.textContent = 'Cargando página…';
+  const page = await pdf.getPage(current);
+  const viewport = page.getViewport({scale: 1.5});
+  const canvas = document.querySelector('#page');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), canvas, viewport }).promise;
+  const text = await page.getTextContent();
+  document.querySelector('#text').textContent = text.items.map(item => item.str || '').join(' ');
+  document.querySelector('#pages').textContent = `Página ${current} de ${pdf.numPages}`;
+  canvas.setAttribute('aria-label', `Página ${current} del PDF original`);
+  status.textContent = '';
+  previous.disabled = current === 1;
+  next.disabled = current === pdf.numPages;
+}
+function failed() { status.textContent = 'No se pudo mostrar el PDF. Cierra el visor y descarga el original para revisarlo.'; }
+previous.onclick = () => { current--; render().catch(failed); };
+next.onclick = () => { current++; render().catch(failed); };
+try {
+  const url = decodeURIComponent(location.hash.slice(1));
+  if (!url.startsWith(`blob:${location.origin}/`)) throw new Error('Origen inválido');
+  pdf = await getDocument({url, isEvalSupported:false, cMapUrl:'./pdfjs/cmaps/', cMapPacked:true, standardFontDataUrl:'./pdfjs/standard_fonts/', wasmUrl:'./pdfjs/wasm/'}).promise;
+  await render();
+} catch { failed(); }
+</script></body></html>

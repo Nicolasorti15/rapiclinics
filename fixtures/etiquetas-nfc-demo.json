@@ -1,0 +1,42 @@
+[
+  {
+    "bed": "302-B",
+    "token": "demo_b9bfb5b5ba90bc35d7b742f70982fec3"
+  },
+  {
+    "bed": "303-A",
+    "token": "demo_31b3cd1e05d19c5fe41cd4bcbaa51887"
+  },
+  {
+    "bed": "304-A",
+    "token": "demo_c11064d398e38b980c0bc211724277d2"
+  },
+  {
+    "bed": "305-A",
+    "token": "demo_a21f100caa6054861f61611224c4432e"
+  },
+  {
+    "bed": "306-A",
+    "token": "demo_c526c60840d14ce5d0b3350556bb7b84"
+  },
+  {
+    "bed": "307-A",
+    "token": "demo_119acebd843bf956b979c5c982133f3f"
+  },
+  {
+    "bed": "308-A",
+    "token": "demo_5eab9c857028613012f363c4fdc4f45f"
+  },
+  {
+    "bed": "309-A",
+    "token": "demo_72ef281dcd14df787d1251212e3ce0f7"
+  },
+  {
+    "bed": "310-A",
+    "token": "demo_d3836f79ba14dd6822b4ba7cf1d6e492"
+  },
+  {
+    "bed": "311-A",
+    "token": "demo_c51eab97e8be4a167c28c68ad91ac3b8"
+  }
+]

@@ -1,0 +1,7 @@
+* text=auto
+*.pdf binary
+*.png binary
+*.jpg binary
+*.wav binary
+*.bat text eol=crlf
+*.sh text eol=lf
