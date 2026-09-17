@@ -1,0 +1,54 @@
+name: Android NFC demo APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/android-apk]
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      APP_VARIANT: device
+      APP_IDENTIFIER: app.nicolasorti.rapiclinics.demo
+      EXPO_PUBLIC_API_URL: http://192.168.1.4:8083
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install
+      # The generated demo signing key is for sideloaded testing, not store distribution.
+      # Release packaging embeds JS and does not need an Expo Go/Metro connection.
+      - name: Build standalone demo APK
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+        working-directory: apps/mobile/android
+      - name: Verify NFC permission and APK signature
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$BUILD_TOOLS/aapt" dump permissions "$APK" | tee permissions.txt
+          grep -q android.permission.NFC permissions.txt
+          sha256sum "$APK" > app/build/outputs/apk/release/SHA256SUMS.txt
+        working-directory: apps/mobile/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RAPICLINICS-Android-NFC-demo
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/android/app/build/outputs/apk/release/SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
