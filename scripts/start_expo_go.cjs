@@ -51,6 +51,11 @@ async function main() {
     }
     if (!ready) throw new Error('La API no inicio. Consulta artifacts/expo-go-api.log.');
   }
+  if (process.argv.includes('--api-only')) {
+    console.log(`Servidor listo: ${api}`);
+    console.log('Abre RAPICLINICS en el Android conectado a la misma red. Mantiene el computador encendido.');
+    return;
+  }
   console.log(`Conecta el iPhone a la misma red y escanea el QR. Direccion: exp://${ip}:8084`);
   console.log('Si Windows solicita acceso de Node.js, permite solo redes privadas.');
   console.log('Mantiene el computador encendido y esta ventana abierta.');

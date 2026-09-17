@@ -1,6 +1,14 @@
 {
   "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
   "build": {
+    "android-demo": {
+      "extends": "device",
+      "env": {
+        "APP_VARIANT": "device",
+        "APP_IDENTIFIER": "app.nicolasorti.rapiclinics.demo",
+        "EXPO_PUBLIC_API_URL": "http://192.168.1.4:8083"
+      }
+    },
     "development": { "developmentClient": true, "distribution": "internal" },
     "preview": {
       "distribution": "internal",
