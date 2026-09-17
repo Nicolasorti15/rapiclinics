@@ -2,15 +2,15 @@
 
 Todavía no se han generado APK/IPA firmados. La vista web no es un instalador móvil.
 
-Estado del propietario al preparar esta entrega: cuenta gratuita de Apple creada; Expo aún pendiente. La cuenta gratuita no habilita la distribución ad hoc de EAS. [Requisitos oficiales](https://docs.expo.dev/build/internal-distribution/).
+Estado del propietario: cuenta gratuita de Apple creada y proyecto Expo `@nicolasorti-team/rapiclinics` confirmado. `app.config.ts` ya contiene su identificador público y propietario. La cuenta gratuita de Apple no habilita la distribución ad hoc de EAS. [Requisitos oficiales](https://docs.expo.dev/build/internal-distribution/).
 
 ## Preparación del propietario
 
 1. Crear una cuenta de [Expo](https://expo.dev/signup). EAS permite compilar en la nube desde Windows; revisar sus límites y condiciones antes de solicitar builds.
 2. Para distribuir a iPhone mediante EAS, disponer de Apple Developer. La prueba puede distribuirse por dispositivos registrados o TestFlight. [Distribución interna](https://docs.expo.dev/build/internal-distribution/).
 3. Preparar una API HTTPS alcanzable desde el teléfono, un identificador de app propio y el proyecto EAS. No publicar el servidor local de esta demo tal cual.
-4. En `apps/mobile`, ejecutar `npx eas-cli login` y `npx eas-cli init`. Iniciar sesión personalmente; no compartir contraseñas por chat.
-5. Configurar `EXPO_PUBLIC_API_URL`, `EAS_PROJECT_ID` y `APP_IDENTIFIER` en el entorno **preview** de EAS. El código exige estos valores para el perfil `device` y rechaza direcciones localhost/emulador.
+4. En `apps/mobile`, ejecutar `npx eas-cli login` y comprobar con `npx eas-cli project:info` que corresponde a `@nicolasorti-team/rapiclinics`. El proyecto ya está referenciado en el código; no crear otro con `init`. La sesión del navegador no equivale a una sesión de EAS CLI. Iniciar sesión personalmente; no compartir contraseñas por chat.
+5. Configurar `EXPO_PUBLIC_API_URL` y `APP_IDENTIFIER` en el entorno **preview** de EAS. `EAS_PROJECT_ID` solo es necesario si se desea sustituir el proyecto vinculado. El perfil `device` rechaza direcciones localhost/emulador.
 
 ## Android: APK instalable de prueba
 
@@ -41,4 +41,4 @@ Para TestFlight se usa el perfil `production`, firma y envío a App Store Connec
 
 Inicio de sesión → seleccionar cama → confirmar identidad → guardar y retomar borrador → confirmar visita → completar/reabrir pendiente → importar y visualizar PDF. Después verificar micrófono, denegación de permisos, interrupciones y NFC según [la guía NFC](configurar-nfc.md).
 
-El equipo de desarrollo actual no tiene JDK/SDK Android ni macOS/Xcode; tampoco hay cuentas vinculadas. Estos pasos son la ruta de compilación preparada, no evidencia de instaladores ya disponibles.
+El equipo de desarrollo actual no tiene JDK/SDK Android ni macOS/Xcode. El proyecto Expo está referenciado; faltan autenticación CLI, servidor accesible desde el teléfono y firma Apple para iOS. Estos pasos son la ruta de compilación preparada, no evidencia de instaladores ya disponibles.

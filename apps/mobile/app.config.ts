@@ -3,6 +3,8 @@ import type { ExpoConfig } from "expo/config";
 const production = process.env.APP_VARIANT === "production";
 const physicalDevice = process.env.APP_VARIANT === "device";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+const projectId =
+  process.env.EAS_PROJECT_ID || "0b4566df-74e0-49e0-8d7b-cc927a30fc6f";
 if (physicalDevice) {
   let target: URL;
   try {
@@ -20,7 +22,7 @@ if (physicalDevice) {
       "A physical phone cannot use a localhost or emulator API address. Set EXPO_PUBLIC_API_URL to your server.",
     );
   }
-  if (!process.env.EAS_PROJECT_ID || !process.env.APP_IDENTIFIER) {
+  if (!projectId || !process.env.APP_IDENTIFIER) {
     throw new Error(
       "Device builds require EAS_PROJECT_ID and an owned APP_IDENTIFIER.",
     );
@@ -28,9 +30,7 @@ if (physicalDevice) {
 }
 if (
   production &&
-  (!apiUrl?.startsWith("https://") ||
-    !process.env.EAS_PROJECT_ID ||
-    !process.env.APP_IDENTIFIER)
+  (!apiUrl?.startsWith("https://") || !projectId || !process.env.APP_IDENTIFIER)
 ) {
   throw new Error(
     "Production builds require HTTPS EXPO_PUBLIC_API_URL, EAS_PROJECT_ID and an owned APP_IDENTIFIER.",
@@ -40,6 +40,7 @@ const identifier = process.env.APP_IDENTIFIER || "app.rapiclinics.demo";
 const config: ExpoConfig = {
   name: "RAPICLINICS",
   slug: "rapiclinics",
+  owner: "nicolasorti-team",
   version: "1.0.0",
   orientation: "portrait",
   scheme: "rapiclinics",
@@ -113,9 +114,7 @@ const config: ExpoConfig = {
   ],
   extra: {
     mode: "demo",
-    ...(process.env.EAS_PROJECT_ID
-      ? { eas: { projectId: process.env.EAS_PROJECT_ID } }
-      : {}),
+    eas: { projectId },
   },
 };
 export default config;

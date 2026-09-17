@@ -42,7 +42,7 @@ La app utiliza módulos nativos; **Expo Go no es el entorno de prueba**. Crear u
 ```powershell
 cd apps/mobile
 npx eas-cli login
-npx eas-cli init
+npx eas-cli project:info
 npx eas-cli build --profile development --platform android
 npx eas-cli build --profile development --platform ios
 ```
