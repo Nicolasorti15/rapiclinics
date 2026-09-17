@@ -2,6 +2,8 @@
 
 ## Ejecutado en el entorno de desarrollo
 
+El primer commit `744ea36` también pasó los trabajos API y mobile en GitHub Actions sobre Ubuntu: [ejecución verificada](https://github.com/Nicolasorti15/rapiclinics/actions/runs/35186838376). Esto incluye instalación desde los archivos de dependencias y exportación de los tres bundles.
+
 - Backend: 71 pruebas pytest; 30 casos extractivos comprueban evidencia literal, números, negaciones y ausencia de hechos inventados. Se verifica también la conservación de revisiones como borrador, transcripción original y el filtrado de pendientes por paciente. Laboratorio cubre importación CSV/PDF, integridad del original, duplicados, identidad incompatible, revisión obligatoria, valores inválidos, fechas y acceso por rol/unidad.
 - Cliente móvil: 12 pruebas Vitest correctas: 6 sobre autenticación, refresh, sesión caducada, red, errores y multipart, y 6 con hardware NFC simulado sobre lectura, falta de soporte, NFC desactivado, formato incorrecto, cancelación y tiempo de espera. No sustituyen pruebas de radio NFC real.
 - TypeScript y ESLint sin errores; Ruff sin errores.

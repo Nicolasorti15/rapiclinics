@@ -2,6 +2,8 @@
 
 Todavía no se han generado APK/IPA firmados. La vista web no es un instalador móvil.
 
+Estado del propietario al preparar esta entrega: cuenta gratuita de Apple creada; Expo aún pendiente. La cuenta gratuita no habilita la distribución ad hoc de EAS. [Requisitos oficiales](https://docs.expo.dev/build/internal-distribution/).
+
 ## Preparación del propietario
 
 1. Crear una cuenta de [Expo](https://expo.dev/signup). EAS permite compilar en la nube desde Windows; revisar sus límites y condiciones antes de solicitar builds.
