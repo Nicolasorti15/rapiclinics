@@ -61,7 +61,7 @@ async function send(path: string, options: RequestInit) {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
-    path.endsWith("/transcribe") ? 240000 : 30000,
+    path.endsWith("/transcribe") ? 240000 : 90000,
   );
   try {
     return await fetch(API_URL + path, {
@@ -77,7 +77,7 @@ async function send(path: string, options: RequestInit) {
     });
   } catch {
     throw new ApiError(
-      "No se pudo conectar. Comprueba tu conexión y vuelve a intentarlo.",
+      "No se pudo conectar. El servidor de pruebas puede tardar un minuto en despertar. Comprueba tu conexión y vuelve a intentarlo.",
       0,
     );
   } finally {

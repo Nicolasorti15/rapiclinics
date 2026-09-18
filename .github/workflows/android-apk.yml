@@ -1,4 +1,4 @@
-name: Android NFC demo APK
+name: Android NFC online test APK
 on:
   workflow_dispatch:
   push:
@@ -13,9 +13,9 @@ jobs:
       run:
         working-directory: apps/mobile
     env:
-      APP_VARIANT: device
+      APP_VARIANT: production
       APP_IDENTIFIER: app.nicolasorti.rapiclinics.demo
-      EXPO_PUBLIC_API_URL: http://192.168.1.4:8083
+      EXPO_PUBLIC_API_URL: https://rapiclinics-api-test.onrender.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,7 +32,7 @@ jobs:
       - run: npx expo prebuild --platform android --no-install
       # The generated demo signing key is for sideloaded testing, not store distribution.
       # Release packaging embeds JS and does not need an Expo Go/Metro connection.
-      - name: Build standalone demo APK
+      - name: Build standalone online test APK
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
         working-directory: apps/mobile/android
       - name: Verify NFC permission and APK signature
@@ -46,7 +46,7 @@ jobs:
         working-directory: apps/mobile/android
       - uses: actions/upload-artifact@v4
         with:
-          name: RAPICLINICS-Android-NFC-demo
+          name: RAPICLINICS-Android-NFC-online-test
           path: |
             apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             apps/mobile/android/app/build/outputs/apk/release/SHA256SUMS.txt

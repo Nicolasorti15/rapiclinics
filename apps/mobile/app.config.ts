@@ -41,7 +41,7 @@ const config: ExpoConfig = {
   name: "RAPICLINICS",
   slug: "rapiclinics",
   owner: "nicolasorti-team",
-  version: "1.1.0",
+  version: "1.2.0",
   orientation: "portrait",
   scheme: "rapiclinics",
   userInterfaceStyle: "light",
@@ -49,7 +49,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: identifier,
-    buildNumber: "2",
+    buildNumber: "3",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription:
@@ -60,7 +60,7 @@ const config: ExpoConfig = {
   android: {
     allowBackup: false,
     package: identifier,
-    versionCode: 2,
+    versionCode: 3,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#176B70",
@@ -113,7 +113,7 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
-    mode: "demo",
+    mode: production ? "clinical" : "demo",
     eas: { projectId },
   },
 };
