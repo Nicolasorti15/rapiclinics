@@ -1,7 +1,11 @@
 # Alojamiento gratuito para pruebas
 
-Estado: configuración preparada; falta crear la cuenta y verificar el despliegue.
-El APK 1.1 existente todavía apunta al servidor de la red local.
+Estado al 18 de septiembre de 2026: servidor desplegado en Render con PostgreSQL.
+La comprobación HTTPS `/health` devuelve `status: ok`, `mode: clinical`; `/patients`
+sin autorización devuelve 401. El arranque completó la creación del administrador.
+URL: https://rapiclinics-api-test.onrender.com
+El APK 1.1 sigue apuntando a la red local; la versión 1.2 se prepara con esta URL HTTPS.
+Inicio de sesión con las credenciales del titular y NFC físico: pendientes de prueba.
 
 ## Crear el entorno
 

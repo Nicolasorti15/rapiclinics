@@ -93,6 +93,7 @@ const config: ExpoConfig = {
     "expo-font",
     "expo-asset",
     "expo-document-picker",
+    "expo-sharing",
     [
       "react-native-nfc-manager",
       {
