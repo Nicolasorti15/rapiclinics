@@ -17,11 +17,18 @@ const Auth = createContext<{
   session: Session | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (body: {
+    token: string;
+    email: string;
+    name: string;
+    password: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
 }>({
   session: null,
   ready: false,
   login: async () => {},
+  register: async () => {},
   logout: async () => {},
 });
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -50,8 +57,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(null);
     }
   };
+  const register = async (body: {
+    token: string;
+    email: string;
+    name: string;
+    password: string;
+  }) => {
+    const result = await api<Session>("/auth/register", "POST", body);
+    await saveSession(result);
+    setSession(result);
+  };
   return (
-    <Auth.Provider value={{ session, ready, login, logout }}>
+    <Auth.Provider value={{ session, ready, login, register, logout }}>
       {children}
     </Auth.Provider>
   );

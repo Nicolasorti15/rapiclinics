@@ -1,0 +1,36 @@
+# Standalone clinical deployment behind an HTTPS reverse proxy.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: rapiclinics
+      POSTGRES_USER: rapiclinics
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure a unique database password}
+    volumes:
+      - clinical-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U rapiclinics]
+      interval: 5s
+      retries: 15
+  api:
+    build: ./services/api
+    command: [sh, -c, 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_MODE: clinical
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://rapiclinics:${POSTGRES_PASSWORD}@postgres:5432/rapiclinics
+      STORAGE_BACKEND: database
+      STORAGE_ENCRYPTION_KEY: ${STORAGE_ENCRYPTION_KEY:?Configure and back up the encryption key}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:?Configure the HTTPS API URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Configure allowed web origins}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - clinical-models:/home/appuser/.cache
+volumes:
+  clinical-postgres:
+  clinical-models:

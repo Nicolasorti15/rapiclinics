@@ -1,6 +1,12 @@
 {
   "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
   "build": {
+    "clinical-apk": {
+      "distribution": "internal",
+      "environment": "production",
+      "env": { "APP_VARIANT": "production" },
+      "android": { "buildType": "apk" }
+    },
     "android-demo": {
       "extends": "device",
       "env": {

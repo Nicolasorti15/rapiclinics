@@ -41,7 +41,7 @@ const config: ExpoConfig = {
   name: "RAPICLINICS",
   slug: "rapiclinics",
   owner: "nicolasorti-team",
-  version: "1.0.0",
+  version: "1.1.0",
   orientation: "portrait",
   scheme: "rapiclinics",
   userInterfaceStyle: "light",
@@ -49,18 +49,18 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: identifier,
-    buildNumber: "1",
+    buildNumber: "2",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription:
-        "Graba una visita ficticia cuando pulses el botón de grabación.",
+        "Graba una visita cuando pulses el botón de grabación.",
       NSAppTransportSecurity: { NSAllowsLocalNetworking: !production },
     },
   },
   android: {
     allowBackup: false,
     package: identifier,
-    versionCode: 1,
+    versionCode: 2,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#176B70",
@@ -84,7 +84,7 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission:
-          "Graba una visita ficticia cuando pulses el botón de grabación.",
+          "Graba una visita cuando pulses el botón de grabación.",
         enableBackgroundRecording: false,
         enableBackgroundPlayback: false,
       },
@@ -97,7 +97,7 @@ const config: ExpoConfig = {
       "react-native-nfc-manager",
       {
         nfcPermission:
-          "Lee el identificador de la cama para confirmar al paciente ficticio.",
+          "Lee el identificador de la cama para confirmar al paciente.",
       },
     ],
     [

@@ -27,6 +27,13 @@ import { Button, c, Loading } from "./src/components/ui";
 import type { Routes } from "./src/types";
 import { LabsScreen } from "./src/features/labs/LabsScreen";
 
+import {
+  AdminScreen,
+  RegisterPatientScreen,
+  LinkNfcScreen,
+  isAdmin,
+} from "./src/features/admin/AdminScreens";
+
 const Stack = createNativeStackNavigator<Routes>();
 function Root() {
   const { session, ready } = useAuth();
@@ -73,6 +80,25 @@ function Root() {
           contentStyle: { backgroundColor: c.bg },
         }}
       >
+        {isAdmin(session.user.role) && (
+          <>
+            <Stack.Screen
+              name="Admin"
+              component={AdminScreen}
+              options={{ title: "Administración" }}
+            />
+            <Stack.Screen
+              name="RegisterPatient"
+              component={RegisterPatientScreen}
+              options={{ title: "Registrar paciente" }}
+            />
+            <Stack.Screen
+              name="LinkNfc"
+              component={LinkNfcScreen}
+              options={{ title: "Vincular NFC" }}
+            />
+          </>
+        )}
         <Stack.Screen
           name="Labs"
           component={LabsScreen}

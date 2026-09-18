@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -14,6 +15,33 @@ from sqlalchemy import (
 )
 
 from .db import Base, now, uid
+
+
+class Clinic(Base):
+    __tablename__ = "clinics"
+    id = Column(String, primary_key=True, default=uid)
+    name = Column(String, nullable=False)
+    email_domain = Column(String, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(String, default=now, nullable=False)
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+    id = Column(String, primary_key=True, default=uid)
+    clinic_id = Column(ForeignKey("clinics.id"), nullable=False)
+    email = Column(String, nullable=False)
+    unit = Column(String, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    expires_at = Column(String, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    created_by = Column(ForeignKey("users.id"), nullable=False)
+
+
+class StoredObject(Base):
+    __tablename__ = "stored_objects"
+    id = Column(String, primary_key=True)
+    encrypted_content = Column(LargeBinary, nullable=False)
 
 
 class LabReport(Base):
@@ -37,6 +65,7 @@ class LabReport(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, default=uid)
+    clinic_id = Column(ForeignKey("clinics.id"), nullable=False, default="demo")
     email = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
@@ -59,17 +88,23 @@ class AuthSession(Base):
 class Patient(Base):
     __tablename__ = "patients"
     id = Column(String, primary_key=True, default=uid)
+    clinic_id = Column(ForeignKey("clinics.id"), nullable=False, default="demo")
+    document_type = Column(String, nullable=False, default="CC")
     name = Column(String, nullable=False)
-    identifier = Column(String, unique=True, nullable=False)
+    identifier = Column(String, nullable=False)
     birth_date = Column(String, nullable=False)
     sex = Column(String, nullable=False)
     summary = Column(Text, nullable=False)
     allergies = Column(String, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("clinic_id", "document_type", "identifier", name="uq_patient_clinic_document"),
+    )
 
 
 class Encounter(Base):
     __tablename__ = "encounters"
     id = Column(String, primary_key=True, default=uid)
+    clinic_id = Column(ForeignKey("clinics.id"), nullable=False, default="demo")
     patient_id = Column(ForeignKey("patients.id"), nullable=False)
     service = Column(String, nullable=False)
     status = Column(String, default="ACTIVE", nullable=False)
@@ -80,8 +115,10 @@ class Encounter(Base):
 class Bed(Base):
     __tablename__ = "beds"
     id = Column(String, primary_key=True, default=uid)
-    code = Column(String, unique=True, nullable=False)
+    clinic_id = Column(ForeignKey("clinics.id"), nullable=False, default="demo")
+    code = Column(String, nullable=False)
     unit = Column(String, nullable=False)
+    __table_args__ = (UniqueConstraint("clinic_id", "code", name="uq_bed_clinic_code"),)
 
 
 class Assignment(Base):
@@ -113,9 +150,23 @@ class Assignment(Base):
 class Tag(Base):
     __tablename__ = "tags"
     id = Column(String, primary_key=True, default=uid)
-    bed_id = Column(ForeignKey("beds.id"), nullable=False)
+    bed_id = Column(ForeignKey("beds.id"), nullable=True)
+    patient_id = Column(ForeignKey("patients.id"), nullable=True)
     token_hash = Column(String, unique=True, nullable=False)
     status = Column(String, default="ACTIVE", nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "(bed_id IS NOT NULL AND patient_id IS NULL) OR (bed_id IS NULL AND patient_id IS NOT NULL)",
+            name="tag_single_target",
+        ),
+        Index(
+            "one_active_patient_tag",
+            "patient_id",
+            unique=True,
+            sqlite_where=text("status = 'ACTIVE'"),
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+    )
 
 
 class Scan(Base):
@@ -191,7 +242,7 @@ class Document(Base):
     imported_by = Column(ForeignKey("users.id"), nullable=False)
     filename = Column(String, nullable=False)
     storage_key = Column(String, unique=True, nullable=False)
-    sha256 = Column(String, unique=True, nullable=False)
+    sha256 = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=False)
     status = Column(String, default="REVIEW_REQUIRED", nullable=False)
     identity_status = Column(String, nullable=False)
@@ -202,6 +253,7 @@ class Document(Base):
     ehr_status = Column(String, default="NOT_SENT", nullable=False)
     ehr_payload = Column(JSON)
     __table_args__ = (
+        UniqueConstraint("candidate_patient_id", "sha256", name="uq_document_patient_hash"),
         ForeignKeyConstraint(
             ["encounter_id", "candidate_patient_id"],
             ["encounters.id", "encounters.patient_id"],

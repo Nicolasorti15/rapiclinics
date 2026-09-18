@@ -319,7 +319,7 @@ export function VisitScreen({
               />
             )}
           </Card>
-          <Notice text="Dicta una visita ficticia de hasta 3 minutos. El servidor transcribe tu audio en español sin enviarlo a terceros. El proceso puede tardar; revisa siempre el resultado." />
+          <Notice text="Dicta la visita de hasta 3 minutos. El servidor transcribe tu audio en español sin enviarlo a terceros. El proceso puede tardar; revisa siempre el resultado." />
           {interrupted && (
             <Notice
               error
@@ -328,7 +328,7 @@ export function VisitScreen({
           )}
           <Field
             label="Transcripción o nota escrita"
-            placeholder="Escribe la evolución ficticia. Usa «Pendiente:» para separar una tarea."
+            placeholder="Escribe la evolución. Usa «Pendiente:» para separar una tarea."
             multiline
             value={transcript}
             editable={!recording.isRecording && !action.busy}

@@ -48,6 +48,9 @@ from .schemas import (
     TaskUpdate,
 )
 from .security import (
+    ADMIN_ROLES,
+    clinic_active,
+    public_user,
     CLINICAL_ROLES,
     DOCUMENT_ROLES,
     audit,
@@ -62,18 +65,21 @@ from .security import (
 from .storage import ObjectStorage
 from .speech import LocalSpeechToText
 from .labs import router as labs_router
+from .administration import router as admin_router
 
 
 @asynccontextmanager
 async def lifespan(app):
-    if os.getenv("APP_MODE", "demo") != "demo":
-        raise RuntimeError("This release supports synthetic demo data only")
+    from .settings import validate_deployment
+
+    validate_deployment()
     app.state.storage = ObjectStorage()
     yield
 
 
-app = FastAPI(title="RAPICLINICS Demo API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="RAPICLINICS API", version="0.2.0", lifespan=lifespan)
 app.include_router(labs_router)
+app.include_router(admin_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv(
@@ -87,13 +93,13 @@ rate_buckets = defaultdict(deque)
 
 @app.middleware("http")
 async def headers_and_limits(request: Request, call_next):
-    if request.url.path in {"/auth/login", "/auth/refresh", "/nfc/resolve"}:
+    if request.url.path in {"/auth/login", "/auth/register", "/auth/refresh", "/nfc/resolve"}:
         key = (request.client.host if request.client else "unknown", request.url.path)
         bucket = rate_buckets[key]
         clock = time.monotonic()
         while bucket and bucket[0] < clock - 60:
             bucket.popleft()
-        if len(bucket) >= (10 if request.url.path == "/auth/login" else 60):
+        if len(bucket) >= (10 if request.url.path in {"/auth/login", "/auth/register"} else 60):
             return Response(
                 '{"detail":"Demasiados intentos. Espera un minuto."}',
                 status_code=429,
@@ -118,11 +124,17 @@ def serialize(entity, excluded=()):
 
 def patient_context(db, user, patient_id):
     patient = db.get(Patient, patient_id)
+    if not patient or patient.clinic_id != user.clinic_id:
+        raise HTTPException(404, "Paciente no disponible.")
     encounters = db.scalars(
-        select(Encounter).where(Encounter.patient_id == patient_id, Encounter.status == "ACTIVE")
+        select(Encounter).where(
+            Encounter.patient_id == patient_id,
+            Encounter.clinic_id == user.clinic_id,
+            Encounter.status == "ACTIVE",
+        )
     ).all()
     encounter = next(
-        (item for item in encounters if user.role == "SYSTEM_ADMIN" or item.service == user.unit), None
+        (item for item in encounters if user.role in ADMIN_ROLES or item.service == user.unit), None
     )
     if not patient or not encounter:
         raise HTTPException(404, "Paciente no disponible en tu servicio.")
@@ -192,14 +204,14 @@ def document_response(db, document):
 @app.get("/health")
 def health(db: Session = Depends(db_session)):
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "mode": "demo", "version": "0.1.0"}
+    return {"status": "ok", "mode": os.getenv("APP_MODE", "demo"), "version": "0.2.0"}
 
 
 @app.post("/auth/login")
 def login(body: Login, db: Session = Depends(db_session)):
     user = db.scalar(select(User).where(User.email == body.email.lower(), User.active.is_(True)))
     try:
-        if not user or not hasher.verify(user.password_hash, body.password):
+        if not user or not clinic_active(db, user) or not hasher.verify(user.password_hash, body.password):
             raise ValueError()
     except (VerificationError, ValueError):
         audit(db, None, "login_failed")
@@ -221,7 +233,7 @@ def refresh(body: Refresh, db: Session = Depends(db_session)):
         )
     )
     user = db.get(User, session.user_id) if session else None
-    if not user or not user.active:
+    if not user or not user.active or not clinic_active(db, user):
         raise HTTPException(401, "Sesión caducada.")
     changed = db.execute(
         update(AuthSession)
@@ -245,15 +257,15 @@ def logout(request: Request, user=Depends(get_user), db: Session = Depends(db_se
 
 
 @app.get("/auth/me")
-def me(user=Depends(get_user)):
-    return serialize(user, {"password_hash"})
+def me(user=Depends(get_user), db: Session = Depends(db_session)):
+    return public_user(db, user)
 
 
 @app.get("/patients")
 def patients(user=Depends(get_user), db: Session = Depends(db_session)):
     require_role(user, DOCUMENT_ROLES)
-    query = select(Encounter).where(Encounter.status == "ACTIVE")
-    if user.role != "SYSTEM_ADMIN":
+    query = select(Encounter).where(Encounter.status == "ACTIVE", Encounter.clinic_id == user.clinic_id)
+    if user.role not in ADMIN_ROLES:
         query = query.where(Encounter.service == user.unit)
     return [patient_context(db, user, encounter.patient_id) for encounter in db.scalars(query).all()]
 
@@ -274,9 +286,27 @@ def resolve(body: Resolve, user=Depends(get_user), db: Session = Depends(db_sess
         audit(db, user, "nfc_rejected")
         db.commit()
         raise HTTPException(404, "Etiqueta no registrada o revocada.")
-    assignment = db.scalar(
-        select(Assignment).where(Assignment.bed_id == tag.bed_id, Assignment.status == "ACTIVE")
-    )
+    if tag.patient_id:
+        tagged_patient = db.get(Patient, tag.patient_id)
+        if not tagged_patient or tagged_patient.clinic_id != user.clinic_id:
+            raise HTTPException(404, "Etiqueta no disponible.")
+        assignment = db.scalar(
+            select(Assignment)
+            .join(Encounter)
+            .where(
+                Encounter.patient_id == tag.patient_id,
+                Encounter.clinic_id == user.clinic_id,
+                Encounter.status == "ACTIVE",
+                Assignment.status == "ACTIVE",
+            )
+        )
+    else:
+        bed = db.get(Bed, tag.bed_id)
+        if not bed or bed.clinic_id != user.clinic_id:
+            raise HTTPException(404, "Etiqueta no disponible.")
+        assignment = db.scalar(
+            select(Assignment).where(Assignment.bed_id == tag.bed_id, Assignment.status == "ACTIVE")
+        )
     if not assignment:
         raise HTTPException(409, "Esta cama no tiene un paciente asignado.")
     encounter = encounter_access(db, user, assignment.encounter_id)
@@ -303,6 +333,13 @@ def resolve(body: Resolve, user=Depends(get_user), db: Session = Depends(db_sess
 
 @app.post("/demo/patients/{patient_id}/identify")
 def demo_identify(patient_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
+    if os.getenv("APP_MODE", "demo") != "demo":
+        raise HTTPException(404, "Función de demostración deshabilitada.")
+    return identify_patient(patient_id, user, db)
+
+
+@app.post("/patients/{patient_id}/identify")
+def identify_patient(patient_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
     context = patient_context(db, user, patient_id)
     assignment = db.scalar(
         select(Assignment).where(
@@ -314,7 +351,7 @@ def demo_identify(patient_id: str, user=Depends(get_user), db: Session = Depends
     scan = Scan(user_id=user.id, assignment_id=assignment.id, patient_id=patient_id, expires_at=future(60))
     db.add(scan)
     db.flush()
-    audit(db, user, "demo_identification", scan.id)
+    audit(db, user, "manual_identification", scan.id)
     db.commit()
     return {"scan_id": scan.id, "requires_confirmation": True, "patient": context}
 
@@ -393,7 +430,7 @@ async def audio(
         raise HTTPException(415, "Formato de audio no admitido.")
     content = await limited_read(file, 10 * 1024 * 1024)
     key = uid()
-    request.app.state.storage.put(key, content)
+    request.app.state.storage.put(key, content, db=db)
     visit.audio_key = key
     visit.original_transcript = ""
     audit(db, user, "audio_uploaded", visit.id)
@@ -481,11 +518,15 @@ def discard_visit(visit_id: str, user=Depends(get_user), db: Session = Depends(d
 
 @app.get("/tasks")
 def tasks(patient_id: str | None = None, user=Depends(get_user), db: Session = Depends(db_session)):
-    query = select(Task).join(Encounter, Task.encounter_id == Encounter.id)
+    query = (
+        select(Task)
+        .join(Encounter, Task.encounter_id == Encounter.id)
+        .where(Encounter.clinic_id == user.clinic_id)
+    )
     if patient_id:
         patient_context(db, user, patient_id)
         query = query.where(Task.patient_id == patient_id)
-    if user.role != "SYSTEM_ADMIN":
+    if user.role not in ADMIN_ROLES:
         query = query.where(Encounter.service == user.unit)
     return [
         {**serialize(task), "patient_name": db.get(Patient, task.patient_id).name}
@@ -584,7 +625,9 @@ async def upload_document(
     if not content.startswith(b"%PDF-"):
         raise HTTPException(422, "El archivo no contiene un PDF válido.")
     sha256 = hashlib.sha256(content).hexdigest()
-    if db.scalar(select(Document.id).where(Document.sha256 == sha256)):
+    if db.scalar(
+        select(Document.id).where(Document.sha256 == sha256, Document.candidate_patient_id == patient_id)
+    ):
         raise HTTPException(409, "Este PDF ya fue importado. Consulta el documento existente.")
     extracted = PdfTextExtractor().extract(content)
     patient = db.get(Patient, patient_id)
@@ -607,7 +650,7 @@ async def upload_document(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Este PDF ya fue importado.") from exc
-    request.app.state.storage.put(document.storage_key, content)
+    request.app.state.storage.put(document.storage_key, content, db=db)
     db.add(
         Extraction(
             document_id=document.id,
@@ -688,6 +731,8 @@ def discard_document(document_id: str, user=Depends(get_user), db: Session = Dep
 def ehr_submit(
     document_id: str, body: EhrSubmission, user=Depends(get_user), db: Session = Depends(db_session)
 ):
+    if os.getenv("APP_MODE", "demo") != "demo":
+        raise HTTPException(501, "La integración con el EHR de la clínica aún no está configurada.")
     require_role(user, {"PHYSICIAN", "RECORDS_ADMIN", "SYSTEM_ADMIN"})
     document = document_access(db, user, document_id)
     if document.status != "VALIDATED" or not document.validated_by or not document.patient_id:
@@ -706,6 +751,8 @@ def ehr_submit(
 
 @app.get("/demo/patients/{patient_id}/sample-pdf")
 def sample_pdf(patient_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
+    if os.getenv("APP_MODE", "demo") != "demo":
+        raise HTTPException(404, "Función de demostración deshabilitada.")
     from .seed import fixture_pdf
 
     context = patient_context(db, user, patient_id)

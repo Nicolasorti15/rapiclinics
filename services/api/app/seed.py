@@ -7,7 +7,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
 from .db import SessionLocal
-from .models import Assignment, Bed, Encounter, Patient, Tag, Task, User
+from .models import Assignment, Bed, Clinic, Encounter, Patient, Tag, Task, User
 from .security import digest, hasher
 
 NAMES = [
@@ -47,8 +47,13 @@ def fixture_pdf(identifier, name):
 
 
 def seed(db):
+    if os.getenv("APP_MODE", "demo") != "demo":
+        raise RuntimeError("Demo seeding is disabled in clinical mode")
     if db.scalar(select(User.id).limit(1)):
         return
+    if not db.get(Clinic, "demo"):
+        db.add(Clinic(id="demo", name="Clínica de demostración"))
+        db.flush()
     password = os.getenv("DEMO_PASSWORD", "RapiDemo2026!")
     password_hash = hasher.hash(password)
     for index, name in enumerate(NAMES):

@@ -20,7 +20,7 @@ from .db import db_session, uid
 from .models import Encounter, LabReport, Patient
 from .providers import PdfTextExtractor, identity_match
 from .schemas import StrictModel
-from .security import CLINICAL_ROLES, audit, encounter_access, get_user, require_role
+from .security import ADMIN_ROLES, CLINICAL_ROLES, audit, encounter_access, get_user, require_role
 
 router = APIRouter()
 
@@ -97,7 +97,7 @@ def reports(patient_id: str, user=Depends(get_user), db: Session = Depends(db_se
 
     patient_context(db, user, patient_id)
     query = select(LabReport).join(Encounter).where(LabReport.patient_id == patient_id)
-    if user.role != "SYSTEM_ADMIN":
+    if user.role not in ADMIN_ROLES:
         query = query.where(Encounter.service == user.unit)
     return [public(r) for r in db.scalars(query.order_by(LabReport.created_at.desc())).all()]
 
@@ -156,7 +156,7 @@ async def import_report(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Este informe ya se importó.") from exc
-    request.app.state.storage.put(report.storage_key, content)
+    request.app.state.storage.put(report.storage_key, content, db=db)
     audit(db, user, "lab_imported", report.id)
     db.commit()
     return public(report)

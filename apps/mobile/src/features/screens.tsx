@@ -25,6 +25,7 @@ import {
 import type { Patient, Routes, Scan, Task, Visit } from "../types";
 import { useAction, useAuth, useResource } from "./core";
 import { nfcAvailable, readBedToken } from "./nfc/reader";
+import { isAdmin } from "./admin/AdminScreens";
 import { PatientDrafts } from "./visits/PatientDrafts";
 
 type Props<T extends keyof Routes> = NativeStackScreenProps<Routes, T>;
@@ -57,14 +58,18 @@ function Logo({ large = false }: { large?: boolean }) {
 export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
   const auth = useAuth();
   const action = useAction();
-  const [email, setEmail] = useState("demo@rapiclinics.app");
-  const [password, setPassword] = useState("RapiDemo2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [register, setRegister] = useState(false);
+  const [name, setName] = useState("");
+  const [token, setToken] = useState("");
+  const [repeatPassword, setRepeatPassword] = useState("");
   return (
     <Page safeTop>
       <View style={{ paddingTop: 26, paddingBottom: 12 }}>
         <Logo large />
       </View>
-      <Badge>ENTORNO DE DEMOSTRACIÓN</Badge>
+      <Badge>ACCESO DE LA CLÍNICA</Badge>
       <View style={{ gap: 12 }}>
         <Title>Más cerca del paciente.{"\n"}Todo en una ronda.</Title>
         <Body muted>
@@ -72,9 +77,27 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
         </Body>
       </View>
       <Card>
-        <Text style={s.subtitle}>Te damos la bienvenida</Text>
+        <Text style={s.subtitle}>
+          {register ? "Crear cuenta de médico" : "Te damos la bienvenida"}
+        </Text>
+        {register && (
+          <>
+            <Field
+              label="Código de invitación de tu clínica"
+              value={token}
+              onChangeText={setToken}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Field
+              label="Nombre completo"
+              value={name}
+              onChangeText={setName}
+            />
+          </>
+        )}
         <Field
-          label="Correo electrónico"
+          label="Correo laboral"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -88,22 +111,52 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
           secureTextEntry
           autoComplete="current-password"
         />
+        {register && (
+          <>
+            <Body muted>Contraseña de al menos 12 caracteres.</Body>
+            <Field
+              label="Repite tu contraseña"
+              value={repeatPassword}
+              onChangeText={setRepeatPassword}
+              secureTextEntry
+            />
+          </>
+        )}
         {Boolean(action.error) && <Notice error text={action.error} />}
         <Button
-          title="Iniciar sesión"
+          title={register ? "Crear mi cuenta" : "Iniciar sesión"}
           icon="arrow-right"
           loading={action.busy}
-          onPress={() => action.run(() => auth.login(email, password))}
+          onPress={() =>
+            action.run(async () => {
+              if (register) {
+                if (password.length < 12 || password !== repeatPassword)
+                  throw new Error(
+                    "Las contraseñas deben coincidir y tener al menos 12 caracteres.",
+                  );
+                await auth.register({ email, password, name, token });
+              } else await auth.login(email, password);
+            })
+          }
+        />
+        <Button
+          secondary
+          title={register ? "Ya tengo cuenta" : "Tengo una invitación"}
+          onPress={() => {
+            setRegister(!register);
+            action.setError("");
+          }}
         />
         <Text style={s.small}>
-          La cuenta de demostración está lista para explorar.
+          ¿Necesitas acceso o recuperar tu cuenta? Contacta al administrador de
+          tu clínica.
         </Text>
       </Card>
       <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 8 }}>
         <Icon name="shield" size={20} />
         <Text style={[s.small, { flex: 1 }]}>
-          Solo pacientes y documentos ficticios. Esta demo no ofrece
-          diagnósticos ni recomendaciones médicas.
+          Cada cuenta accede solo a su clínica y servicio autorizado. La
+          administración de usuarios depende de tu clínica.
         </Text>
       </View>
       <Pressable
@@ -174,7 +227,7 @@ export function HomeScreen({ navigation }: Props<"Home">) {
     action.run(async () =>
       navigation.navigate(
         "Confirm",
-        await api<Scan>(`/demo/patients/${id}/identify`, "POST"),
+        await api<Scan>(`/patients/${id}/identify`, "POST"),
       ),
     );
   const pending = tasks.data?.filter((task) => task.status === "OPEN");
@@ -182,7 +235,11 @@ export function HomeScreen({ navigation }: Props<"Home">) {
     <Page safeTop footer={<BottomNav navigation={navigation} active="Home" />}>
       <View style={styles.between}>
         <Logo />
-        <Badge>DEMO</Badge>
+        <Badge>
+          {session?.user.clinic_id === "demo"
+            ? "DEMO"
+            : session?.user.clinic_name || "CLÍNICA"}
+        </Badge>
       </View>
       <View style={{ gap: 8, marginTop: 8 }}>
         <Label>TU ESPACIO DE RONDA</Label>
@@ -204,7 +261,7 @@ export function HomeScreen({ navigation }: Props<"Home">) {
         <Text style={styles.heroBody}>
           {nfcAvailable
             ? "Acerca el teléfono a la etiqueta de la cama y confirma al paciente."
-            : "Selecciona una cama de demostración y confirma al paciente."}
+            : "Busca al paciente por su cédula y confirma su identidad."}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -217,6 +274,14 @@ export function HomeScreen({ navigation }: Props<"Home">) {
           <Icon name="arrow-up-right" size={21} />
         </Pressable>
       </View>
+      {isAdmin(session?.user.role) && (
+        <Button
+          title="Administrar clínica"
+          icon="settings"
+          secondary
+          onPress={() => navigation.navigate("Admin")}
+        />
+      )}
       <View style={styles.stats}>
         <Pressable
           accessibilityRole="button"
@@ -286,13 +351,14 @@ export function HomeScreen({ navigation }: Props<"Home">) {
       )}
       <View style={{ flexDirection: "row", gap: 8, justifyContent: "center" }}>
         <Icon name="lock" size={13} color={c.muted} />
-        <Text style={s.small}>Datos ficticios · Cuidado con intención</Text>
+        <Text style={s.small}>Acceso por clínica · Identidad confirmada</Text>
       </View>
     </Page>
   );
 }
 
 export function PatientsScreen({ navigation }: Props<"Patients">) {
+  const { session } = useAuth();
   const { data, loading, error, reload } = useResource<Patient[]>("/patients");
   const action = useAction();
   const [query, setQuery] = useState("");
@@ -304,16 +370,22 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
   return (
     <Page footer={<BottomNav navigation={navigation} active="Patients" />}>
       <View style={{ gap: 8 }}>
-        <Label>MEDICINA INTERNA</Label>
+        <Label>{session?.user.clinic_name}</Label>
         <Title>Tus pacientes</Title>
         <Body muted>
-          Selecciona una cama de demostración y confirma la identidad antes de
-          continuar.
+          Busca por nombre o cédula y confirma la identidad antes de continuar.
         </Body>
       </View>
+      {isAdmin(session?.user.role) && (
+        <Button
+          title="Registrar paciente"
+          icon="user-plus"
+          onPress={() => navigation.navigate("RegisterPatient")}
+        />
+      )}
       <Field
         label="Buscar en tu servicio"
-        placeholder="Nombre, cama o identificador"
+        placeholder="Nombre, cama o cédula"
         value={query}
         onChangeText={setQuery}
       />
@@ -335,10 +407,7 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
               action.run(async () =>
                 navigation.navigate(
                   "Confirm",
-                  await api<Scan>(
-                    `/demo/patients/${patient.id}/identify`,
-                    "POST",
-                  ),
+                  await api<Scan>(`/patients/${patient.id}/identify`, "POST"),
                 ),
               )
             }
@@ -377,7 +446,7 @@ export function ScanScreen({ navigation }: Props<"Scan">) {
       <Body muted>
         {nfcAvailable
           ? "Acerca la parte superior del teléfono a la etiqueta NFC de la cama."
-          : "En esta versión selecciona una cama de demostración. La lectura NFC requiere una compilación nativa propia."}
+          : "Busca al paciente por cédula. La lectura NFC requiere la app instalada en un teléfono compatible."}
       </Body>
       {Boolean(action.error) && <Notice error text={action.error} />}
       {nfcAvailable && (
@@ -406,13 +475,13 @@ export function ScanScreen({ navigation }: Props<"Scan">) {
         />
       )}
       <Card>
-        <Text style={s.subtitle}>Explora sin una etiqueta</Text>
+        <Text style={s.subtitle}>Identificación por cédula</Text>
         <Body muted>
-          En esta demo puedes seleccionar una cama para recorrer el mismo flujo
-          de confirmación.
+          También puedes buscar al paciente en tu servicio y confirmar su
+          documento de identidad.
         </Body>
         <Button
-          title="Elegir cama de demostración"
+          title="Buscar paciente"
           secondary
           icon="grid"
           onPress={() => navigation.navigate("Patients")}
@@ -474,6 +543,7 @@ export function ConfirmScreen({ route, navigation }: Props<"Confirm">) {
 }
 
 export function PatientScreen({ route, navigation }: Props<"Patient">) {
+  const { session } = useAuth();
   const { patient } = route.params;
   return (
     <Page patient={patient}>
@@ -481,6 +551,14 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
         <Badge>IDENTIDAD CONFIRMADA</Badge>
         <Title>Una mirada a la visita</Title>
       </View>
+      {isAdmin(session?.user.role) && (
+        <Button
+          title="Administrar etiqueta NFC"
+          secondary
+          icon="radio"
+          onPress={() => navigation.navigate("LinkNfc", { patient })}
+        />
+      )}
       <Card>
         <Label>RESUMEN DEL PACIENTE</Label>
         <Body>{patient.summary}</Body>
@@ -496,17 +574,21 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
           <Body muted>{patient.allergies}</Body>
         </View>
       </Card>
-      <PatientDrafts
-        patientId={patient.id}
-        onResume={(visit_id) =>
-          navigation.navigate("Visit", { ...route.params, visit_id })
-        }
-      />
-      <Button
-        title="Registrar visita"
-        icon="mic"
-        onPress={() => navigation.navigate("Visit", route.params)}
-      />
+      {session?.user.role !== "ADMIN" && (
+        <>
+          <PatientDrafts
+            patientId={patient.id}
+            onResume={(visit_id) =>
+              navigation.navigate("Visit", { ...route.params, visit_id })
+            }
+          />
+          <Button
+            title="Registrar visita"
+            icon="mic"
+            onPress={() => navigation.navigate("Visit", route.params)}
+          />
+        </>
+      )}
       <Card style={{ paddingVertical: 6 }}>
         <RowLink
           title="Documentos"
@@ -536,7 +618,7 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
           onPress={() => navigation.navigate("PatientTasks", route.params)}
         />
       </Card>
-      <Notice text="La información de esta demo es ficticia. Toda propuesta requiere revisión antes de guardarse." />
+      <Notice text="Toda propuesta requiere revisión del profesional antes de guardarse." />
     </Page>
   );
 }
@@ -710,21 +792,34 @@ export function SettingsScreen({ navigation }: Props<"Settings">) {
           <View style={s.avatar}>
             <Icon name="user" />
           </View>
-          <Badge>DEMO</Badge>
+          <Badge>
+            {session?.user.clinic_id === "demo"
+              ? "DEMO"
+              : session?.user.clinic_name || "CLÍNICA"}
+          </Badge>
         </View>
         <Text style={s.subtitle}>{session?.user.name}</Text>
         <Body muted>{session?.user.email}</Body>
         <Text style={s.small}>Rol: {session?.user.role}</Text>
       </Card>
+      {isAdmin(session?.user.role) && (
+        <Button
+          title="Administración de la clínica"
+          secondary
+          icon="settings"
+          onPress={() => navigation.navigate("Admin")}
+        />
+      )}
       <Card>
         <RowLink
           title="Privacidad y datos"
-          detail="Cómo funciona esta demostración"
+          detail="Acceso, almacenamiento y permisos"
           icon="shield"
           onPress={() => navigation.navigate("Privacy")}
         />
         <Text style={s.small}>
-          RAPICLINICS · Versión 1.0.0{"\n"}Pacientes ficticios · EHR simulado
+          RAPICLINICS · Versión 1.1.0{"\n"}
+          {session?.user.clinic_name}
         </Text>
       </Card>
       {Boolean(action.error) && <Notice error text={action.error} />}
@@ -743,19 +838,20 @@ export function PrivacyScreen() {
   return (
     <Page>
       <Label>TRANSPARENCIA</Label>
-      <Title>Privacidad y uso{"\n"}de la demo</Title>
+      <Title>Privacidad y uso{"\n"}de los datos</Title>
       <Card>
-        <Text style={s.subtitle}>Solo información ficticia</Text>
+        <Text style={s.subtitle}>Acceso de tu clínica</Text>
         <Body>
-          RAPICLINICS demuestra un flujo de rondas hospitalarias. No introduzcas
-          nombres, historias clínicas, grabaciones ni documentos de pacientes
-          reales.
+          La clínica administra el acceso a los pacientes de su institución. Las
+          cuentas médicas se crean por invitación; solo ADMIN registra pacientes
+          y vincula sus etiquetas NFC. Los entornos marcados DEMO admiten
+          únicamente datos ficticios.
         </Body>
         <Text style={s.subtitle}>Qué se almacena</Text>
         <Body>
-          El servidor de la demo guarda las notas, los pendientes, los PDFs, el
-          audio que decidas subir y un registro de acciones. La sesión se guarda
-          en el almacenamiento seguro del teléfono.
+          El servidor de la clínica guarda las notas, los pendientes, los PDFs,
+          el audio que decidas subir y un registro de acciones. La sesión se
+          guarda en el almacenamiento seguro del teléfono.
         </Body>
         <Text style={s.subtitle}>Permisos bajo tu control</Text>
         <Body>
@@ -767,19 +863,20 @@ export function PrivacyScreen() {
         <Body>
           El audio se transcribe en el servidor con un modelo local. Conservamos
           la transcripción original y una propuesta revisable de redacción. El
-          envío a historia clínica es simulado. No se envía contenido a
-          proveedores de IA externos.
+          envío a un EHR externo necesita una integración contratada y
+          configurada por la clínica. No se envía contenido a proveedores de IA
+          externos.
         </Body>
         <Text style={s.subtitle}>Sin decisiones clínicas</Text>
         <Body>
           Esta versión no proporciona diagnóstico, tratamiento ni dosificación.
           Las propuestas solo se guardan tras una revisión explícita.
         </Body>
-        <Text style={s.subtitle}>Cuenta de demostración</Text>
+        <Text style={s.subtitle}>Gestión de cuentas</Text>
         <Body>
-          No se crean cuentas personales desde la app. El administrador del
-          entorno gestiona las cuentas, la conservación y la eliminación de los
-          datos sintéticos.
+          El administrador invita a cada médico a su correo laboral y puede
+          revocar su acceso. La clínica define la conservación de registros y
+          atiende las solicitudes sobre los datos.
         </Body>
       </Card>
     </Page>

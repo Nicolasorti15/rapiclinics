@@ -6,6 +6,7 @@ __pycache__/
 .expo/
 dist/
 dist-phone/
+dist-clinics-check/
 .env
 .env.*
 !.env.example

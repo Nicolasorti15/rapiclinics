@@ -25,7 +25,7 @@ import {
   Title,
 } from "../../components/ui";
 import type { ClinicalDocument, Routes } from "../../types";
-import { useAction, useResource } from "../core";
+import { useAction, useAuth, useResource } from "../core";
 import { previewPdf } from "./files";
 import { PdfPreview } from "./PdfPreview";
 
@@ -33,6 +33,7 @@ export function DocumentsScreen({
   route,
   navigation,
 }: NativeStackScreenProps<Routes, "Documents">) {
+  const { session } = useAuth();
   const { patient, scan_id } = route.params;
   const { data, error, loading } = useResource<ClinicalDocument[]>(
     `/patients/${patient.id}/documents`,
@@ -106,18 +107,20 @@ export function DocumentsScreen({
         El original se conserva. Tú revisas y confirmas a quién pertenece.
       </Body>
       <Button
-        title="Importar PDF ficticio"
+        title="Importar PDF"
         icon="upload"
         loading={action.busy}
         onPress={choose}
       />
-      <Button
-        title="Usar un PDF de ejemplo"
-        secondary
-        icon="file-plus"
-        loading={action.busy}
-        onPress={sample}
-      />
+      {session?.user.clinic_id === "demo" && (
+        <Button
+          title="Usar un PDF de ejemplo"
+          secondary
+          icon="file-plus"
+          loading={action.busy}
+          onPress={sample}
+        />
+      )}
       {Boolean(error || action.error) && (
         <Notice error text={error || action.error} />
       )}
@@ -126,7 +129,7 @@ export function DocumentsScreen({
       ) : !data?.length ? (
         <Empty
           title="Un lugar para cada documento"
-          text="Importa un PDF ficticio o utiliza el ejemplo incluido para probar la revisión."
+          text="Importa un PDF y verifica su correspondencia con el paciente."
         />
       ) : (
         data.map((document) => (
@@ -233,8 +236,8 @@ export function DocumentScreen({
           {document.extraction.identifiers.join(", ") || "No detectado"}
         </Body>
         <Text style={s.small}>
-          La demo reconoce identificadores SIM-0000. Otros formatos requieren
-          revisión manual.
+          Se buscan cédulas etiquetadas en el texto. Si no se detectan, verifica
+          manualmente el documento original.
         </Text>
       </Card>
       <Card>
@@ -295,55 +298,56 @@ export function DocumentScreen({
           }
         />
       )}
-      {document.status === "VALIDATED" && (
-        <Card>
-          <Label>HISTORIA CLÍNICA SIMULADA</Label>
-          <Body>
-            {document.ehr_status === "ACCEPTED"
-              ? "Envío aceptado por el sistema de demostración."
-              : document.ehr_status === "ERROR"
-                ? "El envío falló. El documento validado sigue guardado; puedes reintentar."
-                : "El documento está listo para un envío simulado."}
-          </Body>
-          {document.ehr_status !== "ACCEPTED" &&
-            (!ehrConfirm ? (
-              <Button
-                title="Preparar envío simulado"
-                secondary
-                icon="send"
-                onPress={() => setEhrConfirm(true)}
-              />
-            ) : (
-              <>
-                <Body muted>
-                  Se asociará el PDF validado a {patient.name} en el EHR de
-                  demostración.
-                </Body>
+      {document.status === "VALIDATED" &&
+        currentSession()?.user.clinic_id === "demo" && (
+          <Card>
+            <Label>HISTORIA CLÍNICA SIMULADA</Label>
+            <Body>
+              {document.ehr_status === "ACCEPTED"
+                ? "Envío aceptado por el sistema de demostración."
+                : document.ehr_status === "ERROR"
+                  ? "El envío falló. El documento validado sigue guardado; puedes reintentar."
+                  : "El documento está listo para un envío simulado."}
+            </Body>
+            {document.ehr_status !== "ACCEPTED" &&
+              (!ehrConfirm ? (
                 <Button
-                  title="Confirmar envío al EHR simulado"
-                  loading={action.busy}
-                  onPress={() =>
-                    action.run(async () => {
-                      setDocument(
-                        await api<ClinicalDocument>(
-                          `/documents/${document.id}/ehr-submit`,
-                          "POST",
-                          { confirmed: true },
-                        ),
-                      );
-                      setEhrConfirm(false);
-                    })
-                  }
-                />
-                <Button
-                  title="Cancelar envío"
+                  title="Preparar envío simulado"
                   secondary
-                  onPress={() => setEhrConfirm(false)}
+                  icon="send"
+                  onPress={() => setEhrConfirm(true)}
                 />
-              </>
-            ))}
-        </Card>
-      )}
+              ) : (
+                <>
+                  <Body muted>
+                    Se asociará el PDF validado a {patient.name} en el EHR de
+                    demostración.
+                  </Body>
+                  <Button
+                    title="Confirmar envío al EHR simulado"
+                    loading={action.busy}
+                    onPress={() =>
+                      action.run(async () => {
+                        setDocument(
+                          await api<ClinicalDocument>(
+                            `/documents/${document.id}/ehr-submit`,
+                            "POST",
+                            { confirmed: true },
+                          ),
+                        );
+                        setEhrConfirm(false);
+                      })
+                    }
+                  />
+                  <Button
+                    title="Cancelar envío"
+                    secondary
+                    onPress={() => setEhrConfirm(false)}
+                  />
+                </>
+              ))}
+          </Card>
+        )}
       {Boolean(action.error) && <Notice error text={action.error} />}
     </Page>
   );

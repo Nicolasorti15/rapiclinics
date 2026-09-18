@@ -19,8 +19,12 @@ class ObjectStorage:
                 key_file.write_bytes(Fernet.generate_key())
             key = key_file.read_bytes()
         self.cipher = Fernet(key)
+        self.database = (
+            os.getenv("STORAGE_BACKEND", "database" if os.getenv("APP_MODE") == "clinical" else "files")
+            == "database"
+        )
         self.s3 = None
-        if os.getenv("S3_ENDPOINT"):
+        if os.getenv("S3_ENDPOINT") and not self.database:
             import boto3
 
             self.s3 = boto3.client(
@@ -31,15 +35,35 @@ class ObjectStorage:
             )
             self.bucket = os.getenv("S3_BUCKET", "rapiclinics")
 
-    def put(self, key: str, content: bytes):
+    def put(self, key: str, content: bytes, db=None):
         encrypted = self.cipher.encrypt(content)
-        if self.s3:
+        if self.database:
+            from .db import SessionLocal
+            from .models import StoredObject
+
+            if db is not None:
+                db.add(StoredObject(id=key, encrypted_content=encrypted))
+                db.flush()
+            else:
+                with SessionLocal() as session:
+                    session.add(StoredObject(id=key, encrypted_content=encrypted))
+                    session.commit()
+        elif self.s3:
             self.s3.put_object(Bucket=self.bucket, Key=key, Body=encrypted, IfNoneMatch="*")
         else:
             with (self.root / key).open("xb") as handle:
                 handle.write(encrypted)
 
     def get(self, key: str):
+        if self.database:
+            from .db import SessionLocal
+            from .models import StoredObject
+
+            with SessionLocal() as db:
+                item = db.get(StoredObject, key)
+                if not item:
+                    raise FileNotFoundError("Stored object unavailable")
+                return self.cipher.decrypt(item.encrypted_content)
         content = (
             self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
             if self.s3

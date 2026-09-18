@@ -16,6 +16,9 @@ vi.mock("expo-secure-store", () => ({
 
 const user = {
   id: "user",
+  clinic_id: "clinic-a",
+  clinic_name: "Clínica A",
+  unit: "Medicina interna",
   name: "Demo",
   email: "demo@example.test",
   role: "PHYSICIAN",

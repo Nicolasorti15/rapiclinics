@@ -11,7 +11,16 @@ export type Patient = {
   bed: string;
   admission_at: string;
 };
-export type User = { id: string; name: string; role: string; email: string };
+export type User = {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  clinic_id: string;
+  clinic_name: string;
+  unit: string;
+  active?: boolean;
+};
 export type Session = {
   access_token: string;
   refresh_token: string;
@@ -60,6 +69,9 @@ export type ClinicalDocument = {
   extraction: { text: string; summary: string; identifiers: string[] };
 };
 export type Routes = {
+  Admin: undefined;
+  RegisterPatient: undefined;
+  LinkNfc: { patient: Patient };
   Home: undefined;
   Patients: undefined;
   Tasks: undefined;

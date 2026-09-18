@@ -1,3 +1,4 @@
+import os
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -9,12 +10,31 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import db_session, now
-from .models import Audit, AuthSession, Encounter, User
+from .models import Audit, AuthSession, Clinic, Encounter, Patient, User
 
 hasher = PasswordHasher()
 bearer = HTTPBearer(auto_error=False)
 CLINICAL_ROLES = {"STUDENT", "INTERN", "RESIDENT", "PHYSICIAN", "NURSE", "SYSTEM_ADMIN"}
-DOCUMENT_ROLES = CLINICAL_ROLES | {"RECORDS_ADMIN"}
+DOCUMENT_ROLES = CLINICAL_ROLES | {"RECORDS_ADMIN", "ADMIN"}
+ADMIN_ROLES = {"ADMIN", "SYSTEM_ADMIN"}
+
+
+def public_user(db, user):
+    clinic = db.get(Clinic, user.clinic_id)
+    return {
+        "id": user.id,
+        "name": user.name,
+        "role": user.role,
+        "email": user.email,
+        "clinic_id": user.clinic_id,
+        "clinic_name": clinic.name,
+        "unit": user.unit,
+    }
+
+
+def clinic_active(db, user):
+    clinic = db.get(Clinic, user.clinic_id) if user else None
+    return bool(clinic and clinic.active and (os.getenv("APP_MODE", "demo") == "demo" or clinic.id != "demo"))
 
 
 def digest(value: str):
@@ -45,7 +65,7 @@ def issue_session(db, user):
         "refresh_token": refresh,
         "token_type": "bearer",
         "expires_in": 900,
-        "user": {"id": user.id, "name": user.name, "role": user.role, "email": user.email},
+        "user": public_user(db, user),
     }
 
 
@@ -62,7 +82,7 @@ def get_user(
         )
     )
     user = db.get(User, session.user_id) if session else None
-    if not user or not user.active:
+    if not user or not user.active or not clinic_active(db, user):
         raise HTTPException(401, "Tu sesión ha caducado. Inicia sesión de nuevo.")
     return user
 
@@ -74,6 +94,13 @@ def require_role(user, allowed):
 
 def encounter_access(db, user, encounter_id):
     encounter = db.get(Encounter, encounter_id)
-    if not encounter or (user.role != "SYSTEM_ADMIN" and encounter.service != user.unit):
+    patient = db.get(Patient, encounter.patient_id) if encounter else None
+    if (
+        not encounter
+        or encounter.clinic_id != user.clinic_id
+        or not patient
+        or patient.clinic_id != user.clinic_id
+        or (user.role not in ADMIN_ROLES and encounter.service != user.unit)
+    ):
         raise HTTPException(404, "No se encontró el episodio autorizado.")
     return encounter

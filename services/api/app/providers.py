@@ -94,7 +94,15 @@ class ExtractiveDocumentSummary:
 
 
 def identity_match(text: str, identifier: str):
-    identifiers = sorted(set(re.findall(r"\bSIM-\d{4}\b", text.upper())))
+    if identifier.startswith("SIM-"):
+        identifiers = sorted(set(re.findall(r"\bSIM-\d{4}\b", text.upper())))
+    else:
+        # Extract only explicitly labelled citizenship IDs, never arbitrary lab values.
+        matches = re.findall(
+            r"(?:C[ÉE]DULA(?:\s+DE\s+CIUDADAN[ÍI]A)?|C\.?C\.?|IDENTIFICACI[ÓO]N)\s*[:#-]?\s*([0-9][0-9. ]{1,20}[0-9])",
+            text.upper(),
+        )
+        identifiers = sorted({re.sub(r"[. ]", "", value) for value in matches})
     if identifiers:
         return ("MATCH" if identifiers == [identifier] else "MISMATCH"), identifiers
     return "NO_IDENTIFIERS", []
