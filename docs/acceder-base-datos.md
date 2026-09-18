@@ -21,40 +21,30 @@ Esta guía no cambia reglas de red ni copia credenciales. El archivo `render.yam
 mantiene `ipAllowList: []`; una resincronización del Blueprint puede volver a bloquear
 las conexiones externas, sin afectar la conexión interna de la app.
 
-## Conectar desde Windows sin instalar otro programa
+## Consultar las tablas con pgAdmin
 
-Se encontró PostgreSQL 18 en `C:\Program Files\PostgreSQL\18`.
-En PowerShell, ejecuta lo siguiente y escribe los valores de **External** cuando
-se soliciten. Usa el nombre completo del host, no su IP ni el hostname interno.
+Descarga pgAdmin para Windows desde https://www.pgadmin.org/download/pgadmin-4-windows/.
+En las carpetas locales de PostgreSQL no se encontró un ejecutable de psql o pgAdmin.
 
-```powershell
-$dbHost = Read-Host 'Host externo que muestra Render'
-$dbUser = Read-Host 'Usuario de PostgreSQL que muestra Render'
-$env:PGSSLMODE = 'require'
-$env:PGOPTIONS = '-c default_transaction_read_only=on'
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h $dbHost -p 5432 -U $dbUser -d rapiclinics -W
-```
+1. En pgAdmin, selecciona **Servers → Register → Server** y usa el nombre RAPICLINICS.
+2. En **Connection**, copia de la conexión externa de Render: host completo, puerto
+   `5432`, base de mantenimiento `rapiclinics`, usuario y contraseña de PostgreSQL.
+3. Configura **SSL mode: require** en los parámetros de conexión y conecta.
+4. Abre **Databases → rapiclinics → Schemas → public → Tables**.
+5. Para explorar una tabla, usa **View/Edit Data → First 100 Rows**. Consulta sin editar.
+   No compartas capturas que muestren contraseñas, sesiones o información de pacientes.
 
-`psql` pedirá la contraseña sin mostrarla. No la incluyas en el comando ni en el chat.
-Estas opciones requieren TLS y ponen la sesión en modo de solo lectura por defecto.
-No sustituyen los permisos de un rol dedicado de solo lectura.
-
-Dentro de `psql`:
+También puedes abrir **Query Tool** y ejecutar consultas de solo lectura:
 
 ```sql
-\dt
-\d patients
+BEGIN READ ONLY;
 SELECT name, active FROM clinics;
 SELECT role, count(*) FROM users GROUP BY role;
 SELECT count(*) AS pacientes FROM patients;
-\q
+COMMIT;
 ```
 
-Al cerrar, limpia las opciones de esta ventana:
-
-```powershell
-Remove-Item Env:PGSSLMODE, Env:PGOPTIONS
-```
+El modo de solo lectura de esta transacción no cambia los permisos del usuario de conexión.
 
 Tablas principales: `clinics` (clínicas), `users` (cuentas y roles), `patients`
 (pacientes), `encounters` (atenciones), `visits` (historias), `tags` (vínculos NFC),
