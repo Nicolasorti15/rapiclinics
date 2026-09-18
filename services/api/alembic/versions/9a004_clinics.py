@@ -8,7 +8,19 @@ down_revision = "9a003"
 branch_labels = depends_on = None
 
 
+def unique_name(table, column):
+    constraints = sa.inspect(op.get_bind()).get_unique_constraints(table)
+    matches = [item for item in constraints if item["column_names"] == [column]]
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected one unique constraint for {table}.{column}")
+    # PostgreSQL names unnamed constraints itself; SQLite uses batch naming.
+    return matches[0]["name"] or f"uq_{table}_{column}"
+
+
 def upgrade():
+    patient_unique = unique_name("patients", "identifier")
+    bed_unique = unique_name("beds", "code")
+    document_unique = unique_name("documents", "sha256")
     op.create_table(
         "clinics",
         sa.Column("id", sa.String(), primary_key=True),
@@ -29,15 +41,15 @@ def upgrade():
             batch.create_foreign_key(f"fk_{table}_clinic", "clinics", ["clinic_id"], ["id"])
             if table == "patients":
                 batch.add_column(sa.Column("document_type", sa.String(), nullable=False, server_default="CC"))
-                batch.drop_constraint("uq_patients_identifier", type_="unique")
+                batch.drop_constraint(patient_unique, type_="unique")
                 batch.create_unique_constraint(
                     "uq_patient_clinic_document", ["clinic_id", "document_type", "identifier"]
                 )
             if table == "beds":
-                batch.drop_constraint("uq_beds_code", type_="unique")
+                batch.drop_constraint(bed_unique, type_="unique")
                 batch.create_unique_constraint("uq_bed_clinic_code", ["clinic_id", "code"])
     with op.batch_alter_table("documents", naming_convention=convention) as batch:
-        batch.drop_constraint("uq_documents_sha256", type_="unique")
+        batch.drop_constraint(document_unique, type_="unique")
         batch.create_unique_constraint("uq_document_patient_hash", ["candidate_patient_id", "sha256"])
     with op.batch_alter_table("tags") as batch:
         batch.alter_column("bed_id", existing_type=sa.String(), nullable=True)
