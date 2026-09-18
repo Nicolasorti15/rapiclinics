@@ -1,0 +1,45 @@
+# Temporary synthetic-data testing only. Free Postgres expires after 30 days.
+services:
+  - type: web
+    name: rapiclinics-api-test
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./services/api/Dockerfile
+    dockerContext: ./services/api
+    healthCheckPath: /health
+    envVars:
+      - key: APP_MODE
+        value: clinical
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rapiclinics-db-test
+          property: connectionString
+      - key: STORAGE_BACKEND
+        value: database
+      - key: STORAGE_ENCRYPTION_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: ""
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: WHISPER_CPU_THREADS
+        value: "1"
+      - key: INITIAL_CLINIC_NAME
+        value: RAPICLINICS Pruebas
+      - key: INITIAL_ADMIN_NAME
+        value: Administrador de pruebas
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+databases:
+  - name: rapiclinics-db-test
+    plan: free
+    region: oregon
+    databaseName: rapiclinics
+    user: rapiclinics
+    ipAllowList: []

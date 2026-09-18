@@ -14,7 +14,12 @@ _inference = threading.Lock()
 def model():
     from faster_whisper import WhisperModel
 
-    return WhisperModel(os.getenv("WHISPER_MODEL", "small"), device="cpu", compute_type="int8", cpu_threads=4)
+    return WhisperModel(
+        os.getenv("WHISPER_MODEL", "small"),
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=max(1, int(os.getenv("WHISPER_CPU_THREADS", "4"))),
+    )
 
 
 def decode(content: bytes):

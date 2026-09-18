@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from .settings import database_url
 
 
 def uid():
@@ -14,7 +15,7 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./rapiclinics.db")
+DATABASE_URL = database_url(os.getenv("DATABASE_URL", "sqlite:///./rapiclinics.db"))
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 )
