@@ -46,7 +46,7 @@ class RegisterDoctor(StrictModel):
     token: str = Field(min_length=32, max_length=256)
     email: str
     name: str = Field(min_length=3, max_length=160)
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     _email = field_validator("email")(normalize_email)
 
 

@@ -113,7 +113,7 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
         />
         {register && (
           <>
-            <Body muted>Contraseña de al menos 12 caracteres.</Body>
+            <Body muted>Mínimo 8 caracteres. No necesitas símbolos ni mayúsculas.</Body>
             <Field
               label="Repite tu contraseña"
               value={repeatPassword}
@@ -130,9 +130,9 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
           onPress={() =>
             action.run(async () => {
               if (register) {
-                if (password.length < 12 || password !== repeatPassword)
+                if (password.length < 8 || password !== repeatPassword)
                   throw new Error(
-                    "Las contraseñas deben coincidir y tener al menos 12 caracteres.",
+                    "Las contraseñas deben coincidir y tener al menos 8 caracteres.",
                   );
                 await auth.register({ email, password, name, token });
               } else await auth.login(email, password);

@@ -6,7 +6,7 @@ La versión 1.1 incorpora cuentas por clínica, invitaciones para médicos, paci
 
 - **ADMIN:** registra pacientes, escribe/activa/revoca etiquetas, invita médicos y desactiva sus cuentas. No se obtiene este rol por escribir un correo específico. El primer administrador se crea desde la consola del servidor.
 - **PHYSICIAN:** consulta pacientes y atiende en su clínica y servicio autorizado. No registra pacientes, emite invitaciones ni modifica NFC.
-- Las invitaciones caducan en 24 horas y sirven una sola vez para el correo indicado. Solo se almacena su hash. El médico establece una contraseña de al menos 12 caracteres en «Tengo una invitación». ADMIN comparte el código personalmente por un canal laboral; la app no envía correo ni afirma haber verificado automáticamente la titularidad del buzón.
+- Las invitaciones caducan en 24 horas y sirven una sola vez para el correo indicado. Solo se almacena su hash. El médico establece una contraseña de al menos 8 caracteres, sin exigir símbolos ni mayúsculas en «Tengo una invitación». ADMIN comparte el código personalmente por un canal laboral; la app no envía correo ni afirma haber verificado automáticamente la titularidad del buzón.
 - Se puede exigir un dominio laboral exacto por clínica. En esta versión un correo pertenece a una única cuenta/clínica; membresías de un mismo médico en varias clínicas necesitan una ampliación del modelo.
 - Las contraseñas se guardan con Argon2. Desactivar un médico revoca sus sesiones y conserva los registros clínicos.
 

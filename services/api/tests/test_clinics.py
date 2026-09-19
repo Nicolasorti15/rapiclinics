@@ -67,6 +67,29 @@ def test_invitation_cannot_grant_admin_and_is_single_use(client, clinics):
     assert client.post("/auth/register", json={**invitation, "role": "ADMIN"}).status_code == 422
 
 
+def test_doctor_can_register_and_login_with_eight_letters(client, clinics):
+    login(client, "admin@clinica-a.test")
+    invitation = client.post(
+        "/admin/invitations", json={"email": "medico@clinica-a.test", "unit": "Medicina interna"}
+    ).json()
+    body = {
+        "token": invitation["token"],
+        "email": "medico@clinica-a.test",
+        "name": "Medico de prueba",
+        "password": "abcdefg",
+    }
+    assert client.post("/auth/register", json=body).status_code == 422
+    body["password"] = "abcdefgh"
+    response = client.post("/auth/register", json=body)
+    assert response.status_code == 201
+    assert response.json()["user"]["role"] == "PHYSICIAN"
+    client.headers.pop("Authorization", None)
+    assert (
+        client.post("/auth/login", json={"email": body["email"], "password": body["password"]}).status_code
+        == 200
+    )
+
+
 def test_clinic_boundaries_and_admin_only_nfc(client, db, clinics):
     login(client, "admin@clinica-a.test")
     patient = client.post("/admin/patients", json=patient_data()).json()
