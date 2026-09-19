@@ -37,11 +37,25 @@ if (
   );
 }
 const identifier = process.env.APP_IDENTIFIER || "app.rapiclinics.demo";
+const liveAds = process.env.ADMOB_MODE === "live";
+const adsAppId = process.env.ADMOB_ANDROID_APP_ID;
+const adsBannerId = process.env.ADMOB_ANDROID_BANNER_ID;
+if (
+  liveAds &&
+  (!/^ca-app-pub-\d{16}~\d{10}$/.test(adsAppId || "") ||
+    !/^ca-app-pub-\d{16}\/\d{10}$/.test(adsBannerId || "") ||
+    adsAppId?.includes("3940256099942544") ||
+    adsBannerId?.includes("3940256099942544"))
+) {
+  throw new Error(
+    "Live AdMob requires your Android app ID and banner unit ID.",
+  );
+}
 const config: ExpoConfig = {
   name: "RAPICLINICS",
   slug: "rapiclinics",
   owner: "nicolasorti-team",
-  version: "1.2.1",
+  version: "1.3.0",
   orientation: "portrait",
   scheme: "rapiclinics",
   userInterfaceStyle: "light",
@@ -49,7 +63,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: identifier,
-    buildNumber: "4",
+    buildNumber: "5",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription:
@@ -60,7 +74,7 @@ const config: ExpoConfig = {
   android: {
     allowBackup: false,
     package: identifier,
-    versionCode: 4,
+    versionCode: 5,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#176B70",
@@ -80,6 +94,16 @@ const config: ExpoConfig = {
     shortName: "RAPICLINICS",
   },
   plugins: [
+    [
+      "react-native-google-mobile-ads",
+      {
+        androidAppId: liveAds
+          ? adsAppId
+          : "ca-app-pub-3940256099942544~3347511713",
+        iosAppId: "ca-app-pub-3940256099942544~1458002511",
+        delayAppMeasurementInit: true,
+      },
+    ],
     [
       "expo-audio",
       {
@@ -114,6 +138,10 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
+    ads: {
+      mode: liveAds ? "live" : "test",
+      androidBannerId: liveAds ? adsBannerId : null,
+    },
     mode: production ? "clinical" : "demo",
     eas: { projectId },
   },

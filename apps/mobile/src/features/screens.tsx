@@ -27,6 +27,7 @@ import { useAction, useAuth, useResource } from "./core";
 import { nfcAvailable, readBedToken } from "./nfc/reader";
 import { isAdmin } from "./admin/AdminScreens";
 import { PatientDrafts } from "./visits/PatientDrafts";
+import { HomeBanner } from "./ads/HomeBanner";
 
 type Props<T extends keyof Routes> = NativeStackScreenProps<Routes, T>;
 
@@ -113,7 +114,9 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
         />
         {register && (
           <>
-            <Body muted>Mínimo 8 caracteres. No necesitas símbolos ni mayúsculas.</Body>
+            <Body muted>
+              Mínimo 8 caracteres. No necesitas símbolos ni mayúsculas.
+            </Body>
             <Field
               label="Repite tu contraseña"
               value={repeatPassword}
@@ -353,6 +356,7 @@ export function HomeScreen({ navigation }: Props<"Home">) {
         <Icon name="lock" size={13} color={c.muted} />
         <Text style={s.small}>Acceso por clínica · Identidad confirmada</Text>
       </View>
+      <HomeBanner />
     </Page>
   );
 }
@@ -818,7 +822,7 @@ export function SettingsScreen({ navigation }: Props<"Settings">) {
           onPress={() => navigation.navigate("Privacy")}
         />
         <Text style={s.small}>
-          RAPICLINICS · Versión 1.1.0{"\n"}
+          RAPICLINICS · Versión 1.3.0{"\n"}
           {session?.user.clinic_name}
         </Text>
       </Card>
@@ -840,6 +844,15 @@ export function PrivacyScreen() {
       <Label>TRANSPARENCIA</Label>
       <Title>Privacidad y uso{"\n"}de los datos</Title>
       <Card>
+        <Text style={s.subtitle}>Publicidad</Text>
+        <Body>
+          En Android podemos mostrar un banner de Google AdMob en el inicio.
+          Solicitamos anuncios no personalizados y no enviamos datos clínicos,
+          cédulas, correos ni audios a la publicidad. Google puede tratar datos
+          del dispositivo, la conexión y la interacción con el anuncio. Cuando
+          corresponda, podrás gestionar el consentimiento desde las opciones de
+          privacidad publicitaria del inicio.
+        </Body>
         <Text style={s.subtitle}>Acceso de tu clínica</Text>
         <Body>
           La clínica administra el acceso a los pacientes de su institución. Las
