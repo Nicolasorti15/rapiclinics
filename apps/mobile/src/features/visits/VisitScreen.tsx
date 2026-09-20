@@ -27,6 +27,7 @@ import {
 } from "../../components/ui";
 import type { Routes, Visit } from "../../types";
 import { useAction } from "../core";
+import { LocalWhisper, localWhisperAvailable } from "./localWhisper";
 
 export function VisitScreen({
   route,
@@ -44,7 +45,24 @@ export function VisitScreen({
   const [suggestion, setSuggestion] = useState("");
   const [audioReady, setAudioReady] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recording = useAudioRecorderState(recorder);
+  const serverRecording = useAudioRecorderState(recorder);
+  const [localMode, setLocalMode] = useState(localWhisperAvailable);
+  const local = useRef<LocalWhisper | null>(null);
+  const [localRecording, setLocalRecording] = useState(false);
+  const [localDuration, setLocalDuration] = useState(0);
+  const [localStatus, setLocalStatus] = useState("");
+  const localActive = useRef(false);
+  const mounted = useRef(true);
+  const recording = localMode
+    ? { isRecording: localRecording, durationMillis: localDuration }
+    : serverRecording;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      void local.current?.dispose().catch(() => {});
+    };
+  }, []);
   const [interrupted, setInterrupted] = useState(false);
   const [restoring, setRestoring] = useState(Boolean(route.params.visit_id));
   const [restoreFailed, setRestoreFailed] = useState(false);
@@ -54,7 +72,10 @@ export function VisitScreen({
   usePreventRemove(
     !allowExit &&
       step !== "done" &&
-      (recording.isRecording || (Boolean(transcript.trim()) && !saved)),
+      (action.busy ||
+        recording.isRecording ||
+        audioReady ||
+        (Boolean(transcript.trim()) && !saved)),
     ({ data }) => setExitAction(data.action),
   );
   useEffect(() => {
@@ -102,6 +123,18 @@ export function VisitScreen({
   }, [resumeId, scanId, setError, restoreAttempt]);
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) => {
+      if (state !== "active" && localActive.current) {
+        localActive.current = false;
+        void local.current
+          ?.stop()
+          .then(() => {
+            if (!mounted.current) return;
+            setLocalRecording(false);
+            setAudioReady(true);
+            setInterrupted(true);
+          })
+          .catch(() => setInterrupted(true));
+      }
       if (state !== "active" && recorder.isRecording) {
         recorder
           .stop()
@@ -124,7 +157,11 @@ export function VisitScreen({
   const toggleRecord = () =>
     action.run(async () => {
       if (recording.isRecording) {
-        await recorder.stop();
+        if (localMode) {
+          localActive.current = false;
+          await local.current?.stop();
+          setLocalRecording(false);
+        } else await recorder.stop();
         setAudioReady(true);
         return;
       }
@@ -133,6 +170,32 @@ export function VisitScreen({
         throw new Error(
           "Activa el permiso del micrófono en los ajustes del teléfono o escribe la nota.",
         );
+      if (localMode) {
+        setAudioReady(false);
+        setLocalDuration(0);
+        setInterrupted(false);
+        local.current ??= new LocalWhisper();
+        try {
+          await local.current.start(
+            setLocalDuration,
+            () => {
+              localActive.current = false;
+              setLocalRecording(false);
+              setAudioReady(true);
+            },
+            setLocalStatus,
+          );
+          if (!mounted.current || AppState.currentState !== "active") {
+            await local.current.stop();
+            throw new Error("Mantén la app abierta para grabar.");
+          }
+          localActive.current = true;
+          setLocalRecording(true);
+        } finally {
+          if (mounted.current) setLocalStatus("");
+        }
+        return;
+      }
       await ensureVisit();
       await setAudioModeAsync({
         allowsRecording: true,
@@ -145,6 +208,20 @@ export function VisitScreen({
     });
   const transcribe = () =>
     action.run(async () => {
+      if (localMode) {
+        if (!local.current) throw new Error("Graba un audio primero.");
+        setLocalStatus("Transcribiendo en el teléfono…");
+        try {
+          const text = await local.current.transcribe();
+          if (!mounted.current) return;
+          setTranscript(text);
+          setOriginalTranscript(""); // /draft stores editable text, not server transcription provenance.
+          setSaved(false);
+        } finally {
+          if (mounted.current) setLocalStatus("");
+        }
+        return;
+      }
       if (!recorder.uri) throw new Error("Graba un audio primero.");
       const id = await ensureVisit();
       const form = new FormData();
@@ -172,6 +249,7 @@ export function VisitScreen({
         : {}),
     });
     setSaved(true);
+    setAudioReady(false);
     return id;
   };
   const review = () =>
@@ -310,16 +388,47 @@ export function VisitScreen({
               loading={action.busy}
               onPress={toggleRecord}
             />
-            {audioReady && (
+            {Boolean(localStatus) && <Body muted>{localStatus}</Body>}
+            {audioReady && !recording.isRecording && (
               <Button
-                title="Transcribir audio real"
+                title={
+                  localMode
+                    ? "Transcribir en el teléfono"
+                    : "Enviar audio y transcribir en servidor"
+                }
                 secondary
                 loading={action.busy}
                 onPress={transcribe}
               />
             )}
           </Card>
-          <Notice text="Dicta la visita de hasta 3 minutos. El servidor transcribe tu audio en español sin enviarlo a terceros. El proceso puede tardar; revisa siempre el resultado." />
+          <Notice
+            text={
+              localMode
+                ? "Whisper tiny multilingüe transcribe en español en este teléfono. La primera grabación descarga el modelo (78 MB); luego puedes dictar sin conexión hasta 3 minutos. Al guardar se envía solo texto. Revisa siempre el resultado."
+                : "Modo servidor: al pulsar transcribir se sube el audio. Dicta hasta 3 minutos y revisa siempre el resultado."
+            }
+          />
+          {localWhisperAvailable && (
+            <Button
+              title={
+                localMode
+                  ? "Cambiar a grabación para servidor"
+                  : "Cambiar a transcripción local"
+              }
+              secondary
+              disabled={recording.isRecording || action.busy}
+              onPress={() =>
+                action.run(async () => {
+                  await local.current?.dispose();
+                  local.current = null;
+                  setAudioReady(false);
+                  setLocalMode(!localMode);
+                  setLocalDuration(0);
+                })
+              }
+            />
+          )}
           {interrupted && (
             <Notice
               error
@@ -462,25 +571,27 @@ export function VisitScreen({
             <Body muted>
               {recording.isRecording
                 ? "Detén la grabación antes de salir."
-                : "Guarda el borrador para retomarlo más tarde o continúa editando."}
+                : "El audio local no se guarda como borrador. Transcribe y guarda el texto antes de salir."}
             </Body>
             <Button
               title="Continuar editando"
               onPress={() => setExitAction(null)}
             />
-            {!recording.isRecording && (
-              <Button
-                title="Guardar y salir"
-                secondary
-                loading={action.busy}
-                onPress={() =>
-                  action.run(async () => {
-                    await saveDraft();
-                    setAllowExit(true);
-                  })
-                }
-              />
-            )}
+            {!recording.isRecording &&
+              !action.busy &&
+              Boolean(transcript.trim()) && (
+                <Button
+                  title="Guardar y salir"
+                  secondary
+                  loading={action.busy}
+                  onPress={() =>
+                    action.run(async () => {
+                      await saveDraft();
+                      setAllowExit(true);
+                    })
+                  }
+                />
+              )}
             {Boolean(action.error) && <Notice error text={action.error} />}
           </Card>
         </View>

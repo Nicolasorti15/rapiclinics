@@ -95,6 +95,7 @@ const config: ExpoConfig = {
     shortName: "RAPICLINICS",
   },
   plugins: [
+    "./plugins/withPcmStop.cjs",
     [
       "react-native-google-mobile-ads",
       {
