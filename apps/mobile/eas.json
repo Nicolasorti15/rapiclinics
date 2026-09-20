@@ -4,7 +4,7 @@
     "clinical-apk": {
       "distribution": "internal",
       "environment": "production",
-      "env": { "APP_VARIANT": "production" },
+      "env": { "APP_VARIANT": "production", "EXPO_PUBLIC_API_URL": "https://rapiclinics-api-test.onrender.com" },
       "android": { "buildType": "apk" }
     },
     "android-demo": {
