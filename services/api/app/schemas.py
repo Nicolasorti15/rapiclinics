@@ -34,6 +34,19 @@ class Draft(StrictModel):
     tasks: list[str] = Field(default_factory=list, max_length=30)
 
 
+class LocalNoteItem(StrictModel):
+    text: str = Field(min_length=1, max_length=2000)
+    source_span: str = Field(min_length=1, max_length=2000)
+
+
+class LocalClinicalProposal(StrictModel):
+    evolution: list[LocalNoteItem] = Field(default_factory=list, max_length=100)
+    tasks: list[LocalNoteItem] = Field(default_factory=list, max_length=30)
+    uncertainties: list[LocalNoteItem] = Field(default_factory=list, max_length=50)
+    suggested_evolution: str = Field(min_length=1, max_length=20000)
+    redaction_method: str = Field(min_length=1, max_length=100)
+
+
 class NoteReview(StrictModel):
     reviewed: Literal[True]
     evolution: str = Field(min_length=1, max_length=20000)

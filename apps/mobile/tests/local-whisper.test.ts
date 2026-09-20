@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { LocalWhisper } from "../src/features/visits/localWhisper.android";
 
 const mocks = vi.hoisted(() => ({
   info: vi.fn(),
@@ -39,7 +40,6 @@ vi.mock("whisper.rn/utils/common", () => ({
     new Uint8Array(Buffer.from(value, "base64")),
 }));
 vi.mock("whisper.rn/index", () => ({ initWhisper: mocks.whisperInit }));
-import { LocalWhisper } from "../src/features/visits/localWhisper.android";
 
 beforeEach(() => {
   vi.resetAllMocks();

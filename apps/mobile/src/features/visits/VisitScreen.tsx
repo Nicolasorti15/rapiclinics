@@ -28,6 +28,10 @@ import {
 import type { Routes, Visit } from "../../types";
 import { useAction } from "../core";
 import { LocalWhisper, localWhisperAvailable } from "./localWhisper";
+import {
+  LocalClinicalAI,
+  localClinicalAIAvailable,
+} from "./localClinicalAI";
 
 export function VisitScreen({
   route,
@@ -48,6 +52,7 @@ export function VisitScreen({
   const serverRecording = useAudioRecorderState(recorder);
   const [localMode, setLocalMode] = useState(localWhisperAvailable);
   const local = useRef<LocalWhisper | null>(null);
+  const clinicalAI = useRef<LocalClinicalAI | null>(null);
   const [localRecording, setLocalRecording] = useState(false);
   const [localDuration, setLocalDuration] = useState(0);
   const [localStatus, setLocalStatus] = useState("");
@@ -61,6 +66,7 @@ export function VisitScreen({
     return () => {
       mounted.current = false;
       void local.current?.dispose().catch(() => {});
+      void clinicalAI.current?.dispose().catch(() => {});
     };
   }, []);
   const [interrupted, setInterrupted] = useState(false);
@@ -215,7 +221,7 @@ export function VisitScreen({
           const text = await local.current.transcribe();
           if (!mounted.current) return;
           setTranscript(text);
-          setOriginalTranscript(""); // /draft stores editable text, not server transcription provenance.
+          setOriginalTranscript(text);
           setSaved(false);
         } finally {
           if (mounted.current) setLocalStatus("");
@@ -255,12 +261,61 @@ export function VisitScreen({
   const review = () =>
     action.run(async () => {
       const id = await saveDraft();
-      const proposal = await api<Visit>(`/visits/${id}/structure`, "POST");
+
+      let proposal: Visit;
+
+      if (localClinicalAIAvailable) {
+        const ai = clinicalAI.current ?? new LocalClinicalAI();
+        clinicalAI.current = ai;
+
+        try {
+          if (mounted.current) {
+            setLocalStatus("Preparando propuesta clínica en el teléfono…");
+          }
+
+          const localProposal = await ai.structure(
+            transcript,
+            (text) => {
+              if (mounted.current) setLocalStatus(text);
+            },
+          );
+
+          proposal = await api<Visit>(
+            `/visits/${id}/local-structure`,
+            "POST",
+            {
+              evolution: localProposal.evolution.map(
+                ({ text, source_span }) => ({ text, source_span }),
+              ),
+              tasks: localProposal.tasks.map(
+                ({ text, source_span }) => ({ text, source_span }),
+              ),
+              uncertainties: localProposal.uncertainties.map(
+                ({ text, source_span }) => ({ text, source_span }),
+              ),
+              suggested_evolution: localProposal.suggested_evolution,
+              redaction_method: localProposal.redaction_method,
+            },
+          );
+        } finally {
+          if (mounted.current) setLocalStatus("");
+        }
+      } else {
+        proposal = await api<Visit>(
+          `/visits/${id}/structure`,
+          "POST",
+        );
+      }
+
+      if (!mounted.current) return;
+
       setEvolution(
         proposal.note.evolution?.map((item) => item.text).join("\n") ||
           transcript,
       );
-      setTasks(proposal.note.tasks?.map((item) => item.text).join("\n") || "");
+      setTasks(
+        proposal.note.tasks?.map((item) => item.text).join("\n") || "",
+      );
       setSuggestion(proposal.note.suggested_evolution || "");
       setStep("review");
     });

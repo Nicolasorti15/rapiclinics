@@ -42,6 +42,7 @@ from .schemas import (
     Draft,
     EhrSubmission,
     Login,
+    LocalClinicalProposal,
     NoteReview,
     Refresh,
     Resolve,
@@ -56,6 +57,7 @@ from .security import (
     audit,
     digest,
     encounter_access,
+    encounter_read_access,
     future,
     get_user,
     hasher,
@@ -134,10 +136,11 @@ def patient_context(db, user, patient_id):
         )
     ).all()
     encounter = next(
-        (item for item in encounters if user.role in ADMIN_ROLES or item.service == user.unit), None
+        (item for item in encounters if item.service == user.unit),
+        encounters[0] if encounters else None,
     )
-    if not patient or not encounter:
-        raise HTTPException(404, "Paciente no disponible en tu servicio.")
+    if not encounter:
+        raise HTTPException(404, "Paciente sin episodio activo disponible.")
     assignment = db.scalar(
         select(Assignment).where(Assignment.encounter_id == encounter.id, Assignment.status == "ACTIVE")
     )
@@ -185,12 +188,27 @@ def visit_access(db, user, visit_id, edit=False):
     return visit
 
 
-def document_access(db, user, document_id):
+def document_read_access(db, user, document_id):
     document = db.get(Document, document_id)
     if not document:
         raise HTTPException(404, "Documento no encontrado.")
+
+    encounter_read_access(db, user, document.encounter_id)
+    return document
+
+
+def document_write_access(db, user, document_id):
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Documento no encontrado.")
+
     encounter_access(db, user, document.encounter_id)
     return document
+
+
+def document_access(db, user, document_id):
+    """Compatibilidad temporal: acceso estricto para operaciones de escritura."""
+    return document_write_access(db, user, document_id)
 
 
 def document_response(db, document):
@@ -264,10 +282,19 @@ def me(user=Depends(get_user), db: Session = Depends(db_session)):
 @app.get("/patients")
 def patients(user=Depends(get_user), db: Session = Depends(db_session)):
     require_role(user, DOCUMENT_ROLES)
-    query = select(Encounter).where(Encounter.status == "ACTIVE", Encounter.clinic_id == user.clinic_id)
-    if user.role not in ADMIN_ROLES:
-        query = query.where(Encounter.service == user.unit)
-    return [patient_context(db, user, encounter.patient_id) for encounter in db.scalars(query).all()]
+    encounters = db.scalars(
+        select(Encounter).where(
+            Encounter.status == "ACTIVE",
+            Encounter.clinic_id == user.clinic_id,
+        )
+    ).all()
+
+    patient_ids = list(dict.fromkeys(encounter.patient_id for encounter in encounters))
+
+    return [
+        patient_context(db, user, patient_id)
+        for patient_id in patient_ids
+    ]
 
 
 @app.get("/patients/{patient_id}")
@@ -460,6 +487,70 @@ def transcribe(visit_id: str, request: Request, user=Depends(get_user), db: Sess
     }
 
 
+@app.post("/visits/{visit_id}/local-structure")
+def local_structure(
+    visit_id: str,
+    body: LocalClinicalProposal,
+    user=Depends(get_user),
+    db: Session = Depends(db_session),
+):
+    visit = visit_access(db, user, visit_id, edit=True)
+
+    if not visit.transcript.strip():
+        raise HTTPException(
+            422,
+            "Añade una transcripción antes de continuar.",
+        )
+
+    allowed_method = "qwen3-1.7b-q4_k_m-local-v1"
+
+    if body.redaction_method != allowed_method:
+        raise HTTPException(
+            422,
+            "Método de redacción local no reconocido.",
+        )
+
+    def validated_items(items):
+        result = []
+
+        for item in items:
+            if item.source_span not in visit.transcript:
+                raise HTTPException(
+                    422,
+                    "La propuesta contiene una referencia que no existe en la transcripción.",
+                )
+
+            result.append(
+                {
+                    "text": item.text,
+                    "source_span": item.source_span,
+                    "requires_review": True,
+                }
+            )
+
+        return result
+
+    visit.note = {
+        "evolution": validated_items(body.evolution),
+        "tasks": validated_items(body.tasks),
+        "uncertainties": validated_items(body.uncertainties),
+        "suggested_evolution": body.suggested_evolution,
+        "redaction_method": allowed_method,
+    }
+
+    visit.status = "REVIEW_REQUIRED"
+
+    audit(
+        db,
+        user,
+        "visit_local_structure",
+        visit.id,
+        redaction_method=allowed_method,
+    )
+
+    db.commit()
+    return serialize(visit, {"audio_key"})
+
 @app.post("/visits/{visit_id}/structure")
 def structure(visit_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
     visit = visit_access(db, user, visit_id, edit=True)
@@ -526,7 +617,7 @@ def tasks(patient_id: str | None = None, user=Depends(get_user), db: Session = D
     if patient_id:
         patient_context(db, user, patient_id)
         query = query.where(Task.patient_id == patient_id)
-    if user.role not in ADMIN_ROLES:
+    elif user.role not in ADMIN_ROLES:
         query = query.where(Encounter.service == user.unit)
     return [
         {**serialize(task), "patient_name": db.get(Patient, task.patient_id).name}
@@ -668,14 +759,14 @@ async def upload_document(
 
 @app.get("/documents/{document_id}")
 def get_document(document_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
-    return document_response(db, document_access(db, user, document_id))
+    return document_response(db, document_read_access(db, user, document_id))
 
 
 @app.get("/documents/{document_id}/file")
 def document_file(
     document_id: str, request: Request, user=Depends(get_user), db: Session = Depends(db_session)
 ):
-    document = document_access(db, user, document_id)
+    document = document_read_access(db, user, document_id)
     content = request.app.state.storage.get(document.storage_key)
     if hashlib.sha256(content).hexdigest() != document.sha256:
         raise HTTPException(409, "No se pudo verificar la integridad del documento.")

@@ -92,15 +92,36 @@ def require_role(user, allowed):
         raise HTTPException(403, "Tu rol no permite esta acción.")
 
 
-def encounter_access(db, user, encounter_id):
+def encounter_read_access(db, user, encounter_id):
+    """Autoriza lectura clínica básica dentro de la misma clínica.
+
+    Este es el punto donde más adelante podrá añadirse un modelo
+    probabilístico de pertinencia de acceso tipo JEV.
+    """
     encounter = db.get(Encounter, encounter_id)
     patient = db.get(Patient, encounter.patient_id) if encounter else None
+
     if (
         not encounter
         or encounter.clinic_id != user.clinic_id
         or not patient
         or patient.clinic_id != user.clinic_id
-        or (user.role not in ADMIN_ROLES and encounter.service != user.unit)
     ):
         raise HTTPException(404, "No se encontró el episodio autorizado.")
+
     return encounter
+
+
+def encounter_write_access(db, user, encounter_id):
+    """Autoriza modificaciones sobre un episodio clínico."""
+    encounter = encounter_read_access(db, user, encounter_id)
+
+    if user.role not in ADMIN_ROLES and encounter.service != user.unit:
+        raise HTTPException(404, "No se encontró el episodio autorizado.")
+
+    return encounter
+
+
+def encounter_access(db, user, encounter_id):
+    """Compatibilidad temporal: mantiene la política estricta anterior."""
+    return encounter_write_access(db, user, encounter_id)

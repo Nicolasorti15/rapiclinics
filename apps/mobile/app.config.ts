@@ -96,6 +96,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "./plugins/withPcmStop.cjs",
+    "llama.rn",
     [
       "react-native-google-mobile-ads",
       {

@@ -92,16 +92,27 @@ def test_lab_pdf_extraction_and_original(client, context):
     assert confirm(client, context, report).status_code == 200
 
 
-def test_lab_unit_access_enforced_on_list_and_original(client, context, db):
+def test_lab_cross_unit_read_allowed_but_confirmation_stays_restricted(client, context, db):
     report = upload(client, context).json()
     record = db.get(LabReport, report["id"])
-    other = Encounter(patient_id=record.patient_id, service="Otro servicio", status="ENDED")
+    other = Encounter(
+        patient_id=record.patient_id,
+        service="Otro servicio",
+        status="ENDED",
+    )
     db.add(other)
     db.flush()
     record.encounter_id = other.id
     db.commit()
-    assert client.get(f"/patients/{record.patient_id}/labs").json() == []
-    assert client.get(f"/labs/{record.id}/file").status_code == 404
+
+    reports = client.get(f"/patients/{record.patient_id}/labs")
+    assert reports.status_code == 200
+    assert any(item["id"] == record.id for item in reports.json())
+
+    # El original puede consultarse transversalmente dentro de la clínica.
+    assert client.get(f"/labs/{record.id}/file").status_code == 200
+
+    # Confirmarlo sigue siendo una operación de escritura restringida.
     assert confirm(client, context, report).status_code == 404
 
 

@@ -20,7 +20,7 @@ from .db import db_session, uid
 from .models import Encounter, LabReport, Patient
 from .providers import PdfTextExtractor, identity_match
 from .schemas import StrictModel
-from .security import ADMIN_ROLES, CLINICAL_ROLES, audit, encounter_access, get_user, require_role
+from .security import CLINICAL_ROLES, audit, encounter_access, encounter_read_access, get_user, require_role
 
 router = APIRouter()
 
@@ -77,10 +77,20 @@ def extract_rows(text: str, csv_file: bool) -> list[dict]:
     return rows
 
 
-def access(db, user, report_id):
+def lab_read_access(db, user, report_id):
     report = db.get(LabReport, report_id)
     if not report:
         raise HTTPException(404, "Informe no encontrado.")
+
+    encounter_read_access(db, user, report.encounter_id)
+    return report
+
+
+def lab_write_access(db, user, report_id):
+    report = db.get(LabReport, report_id)
+    if not report:
+        raise HTTPException(404, "Informe no encontrado.")
+
     encounter_access(db, user, report.encounter_id)
     return report
 
@@ -96,10 +106,20 @@ def reports(patient_id: str, user=Depends(get_user), db: Session = Depends(db_se
     from .main import patient_context
 
     patient_context(db, user, patient_id)
-    query = select(LabReport).join(Encounter).where(LabReport.patient_id == patient_id)
-    if user.role not in ADMIN_ROLES:
-        query = query.where(Encounter.service == user.unit)
-    return [public(r) for r in db.scalars(query.order_by(LabReport.created_at.desc())).all()]
+    query = (
+        select(LabReport)
+        .join(Encounter)
+        .where(
+            LabReport.patient_id == patient_id,
+            Encounter.clinic_id == user.clinic_id,
+        )
+    )
+    return [
+        public(r)
+        for r in db.scalars(
+            query.order_by(LabReport.created_at.desc())
+        ).all()
+    ]
 
 
 @router.post("/patients/{patient_id}/labs", status_code=201)
@@ -164,7 +184,7 @@ async def import_report(
 
 @router.get("/labs/{report_id}/file")
 def original(report_id: str, request: Request, user=Depends(get_user), db: Session = Depends(db_session)):
-    report = access(db, user, report_id)
+    report = lab_read_access(db, user, report_id)
     content = request.app.state.storage.get(report.storage_key)
     if hashlib.sha256(content).hexdigest() != report.sha256:
         raise HTTPException(409, "No se pudo verificar el original.")
@@ -180,7 +200,7 @@ def confirm(report_id: str, body: LabReview, user=Depends(get_user), db: Session
     from .main import valid_scan
 
     require_role(user, CLINICAL_ROLES)
-    report = access(db, user, report_id)
+    report = lab_write_access(db, user, report_id)
     scan, _, encounter = valid_scan(db, user, body.scan_id)
     if report.patient_id != scan.patient_id or report.encounter_id != encounter.id:
         raise HTTPException(409, "El contexto no corresponde a este informe.")
