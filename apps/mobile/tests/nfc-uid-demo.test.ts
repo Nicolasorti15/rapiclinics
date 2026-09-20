@@ -88,22 +88,33 @@ describe("read-only UID demo", () => {
     const { readBedToken } = await import("../src/features/nfc/reader.native");
     await expect(readBedToken()).rejects.toThrow("solo está asociada");
   });
-  it.each(["clinical", "disabled", "ios"])(
-    "does not map a UID in %s mode",
-    async (mode) => {
-      if (mode === "clinical") config.mode = "clinical";
-      if (mode === "disabled") config.enabled = false;
-      if (mode === "ios") config.os = "ios";
-      const { readBedToken } =
-        await import("../src/features/nfc/reader.native");
-      await expect(readBedToken()).rejects.toThrow("no contiene");
-      expect(manager.requestTechnology).toHaveBeenCalledWith(
-        NfcTech.Ndef,
-        expect.anything(),
-      );
-    },
-  );
-  it("preserves a valid NDEF token even on the demo UID", async () => {
+  it("maps the selected UID in clinical mode when the test flag is enabled", async () => {
+config.mode = "clinical";
+const { readBedToken } = await import("../src/features/nfc/reader.native");
+await expect(readBedToken()).resolves.toBe(
+"demo_b9bfb5b5ba90bc35d7b742f70982fec3",
+);
+expect(manager.requestTechnology).toHaveBeenCalledWith(
+[NfcTech.Ndef, NfcTech.NfcA],
+expect.anything(),
+);
+});
+
+it.each(["disabled", "ios"])(
+"does not map a UID in %s mode",
+async (mode) => {
+if (mode === "disabled") config.enabled = false;
+if (mode === "ios") config.os = "ios";
+const { readBedToken } =
+await import("../src/features/nfc/reader.native");
+await expect(readBedToken()).rejects.toThrow("no contiene");
+expect(manager.requestTechnology).toHaveBeenCalledWith(
+NfcTech.Ndef,
+expect.anything(),
+);
+},
+);
+it("preserves a valid NDEF token even on the demo UID", async () => {
     vi.mocked(manager.getTag).mockResolvedValue({
       id: "0FC401B6",
       ndefMessage: [

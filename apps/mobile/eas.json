@@ -4,7 +4,7 @@
     "clinical-apk": {
       "distribution": "internal",
       "environment": "production",
-      "env": { "APP_VARIANT": "production", "APP_IDENTIFIER": "app.nicolasorti.rapiclinics", "EXPO_PUBLIC_API_URL": "https://rapiclinics-api-test.onrender.com" },
+      "env": { "APP_VARIANT": "production", "APP_IDENTIFIER": "app.nicolasorti.rapiclinics", "EXPO_PUBLIC_API_URL": "https://rapiclinics-api-test.onrender.com", "NFC_UID_DEMO": "1" },
       "android": { "buildType": "apk" }
     },
     "android-demo": {

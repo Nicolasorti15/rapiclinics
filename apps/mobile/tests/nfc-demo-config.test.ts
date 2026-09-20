@@ -21,9 +21,10 @@ it("leaves normal builds unchanged", async () => {
   expect(config.extra?.nfcUidDemo).toBe(false);
   expect(config.name).toBe("RAPICLINICS");
 });
-it("refuses to compile a production build with the demo UID", async () => {
-  vi.stubEnv("APP_VARIANT", "production");
-  await expect(import("../app.config")).rejects.toThrow(
-    "solo está disponible en modo demo",
-  );
+it("allows the explicitly enabled UID test in a production profile", async () => {
+vi.stubEnv("APP_VARIANT", "production");
+const { default: config } = await import("../app.config");
+expect(config.extra?.nfcUidDemo).toBe(true);
+expect(config.extra?.mode).toBe("clinical");
+expect(config.name).toBe("RAPICLINICS NFC prueba");
 });

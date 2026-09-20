@@ -5,7 +5,6 @@ import { Platform } from "react-native";
 // never an authentication factor or a replacement for server authorization.
 export const uidDemoEnabled =
   Platform.OS === "android" &&
-  Constants.expoConfig?.extra?.mode === "demo" &&
   Constants.expoConfig?.extra?.nfcUidDemo === true;
 
 function demoTokenForUid(id?: string): string | undefined {

@@ -2,11 +2,6 @@ import type { ExpoConfig } from "expo/config";
 
 const production = process.env.APP_VARIANT === "production";
 const nfcUidDemo = process.env.NFC_UID_DEMO === "1";
-if (production && nfcUidDemo) {
-  throw new Error(
-    "La tarjeta UID de prueba solo está disponible en modo demo.",
-  );
-}
 const physicalDevice = process.env.APP_VARIANT === "device";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 const projectId =
