@@ -24,7 +24,7 @@ import {
 } from "../components/ui";
 import type { Patient, Routes, Scan, Task, Visit } from "../types";
 import { useAction, useAuth, useResource } from "./core";
-import { nfcAvailable, readBedToken } from "./nfc/reader";
+import { nfcAvailable, readBedToken, uidDemoEnabled } from "./nfc/reader";
 import { isAdmin } from "./admin/AdminScreens";
 import { PatientDrafts } from "./visits/PatientDrafts";
 import { HomeBanner } from "./ads/HomeBanner";
@@ -436,6 +436,9 @@ export function ScanScreen({ navigation }: Props<"Scan">) {
   return (
     <Page>
       <Label>PASO 1 DE 2 · IDENTIFICAR</Label>
+      {uidDemoEnabled && (
+        <Notice text="Prueba NFC: la tarjeta 0FC401B6 identifica la cama ficticia 302-B. Acércala sin formatearla; no se escribe en ella. Las etiquetas NDEF siguen funcionando." />
+      )}
       <Title>Conecta con{"\n"}la siguiente visita.</Title>
       <View style={styles.scanVisual}>
         <View style={styles.scanRing}>

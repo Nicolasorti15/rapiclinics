@@ -4,3 +4,4 @@ export async function readBedToken(_signal?: AbortSignal): Promise<string> {
   );
 }
 export const nfcAvailable = false;
+export const uidDemoEnabled = false;

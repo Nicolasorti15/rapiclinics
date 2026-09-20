@@ -1,5 +1,7 @@
 import { expect, it, vi } from "vitest";
 
+vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
+
 vi.mock("expo-constants", () => ({
   default: { executionEnvironment: "storeClient" },
   ExecutionEnvironment: { StoreClient: "storeClient" },

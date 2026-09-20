@@ -1,6 +1,12 @@
 import type { ExpoConfig } from "expo/config";
 
 const production = process.env.APP_VARIANT === "production";
+const nfcUidDemo = process.env.NFC_UID_DEMO === "1";
+if (production && nfcUidDemo) {
+  throw new Error(
+    "La tarjeta UID de prueba solo está disponible en modo demo.",
+  );
+}
 const physicalDevice = process.env.APP_VARIANT === "device";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 const projectId =
@@ -52,7 +58,7 @@ if (
   );
 }
 const config: ExpoConfig = {
-  name: "RAPICLINICS",
+  name: nfcUidDemo ? "RAPICLINICS NFC prueba" : "RAPICLINICS",
   slug: "rapiclinics",
   owner: "nicolasorti-team",
   version: "1.3.0",
@@ -138,6 +144,7 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
+    nfcUidDemo,
     ads: {
       mode: liveAds ? "live" : "test",
       androidBannerId: liveAds ? adsBannerId : null,
