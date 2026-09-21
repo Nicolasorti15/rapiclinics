@@ -60,7 +60,7 @@ function feed() {
   mocks.on.mock.calls[0][1](Buffer.from([0, 64, 0, 128]).toString("base64"));
 }
 
-it("uses a cached multilingual model offline and transcribes float32 Spanish without uploading audio", async () => {
+it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish without uploading audio", async () => {
   const local = new LocalWhisper();
   await start(local);
   feed();
@@ -74,8 +74,8 @@ it("uses a cached multilingual model offline and transcribes float32 Spanish wit
     }),
   );
   expect(
-    Array.from(new Float32Array(mocks.transcribe.mock.calls[0][0])),
-  ).toEqual([0.5, -1]);
+    Array.from(new Uint8Array(mocks.transcribe.mock.calls[0][0])),
+  ).toEqual([0, 64, 0, 128]);
   expect(mocks.transcribe.mock.calls[0][1]).toEqual({
     language: "es",
     translate: false,
