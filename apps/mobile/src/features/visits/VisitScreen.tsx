@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Modal, Platform, Text, View } from "react-native";
 import { usePreventRemove, NavigationAction } from "@react-navigation/native";
 import {
@@ -22,16 +22,14 @@ import {
   Loading,
   Notice,
   Page,
+  PatientIdentity,
   s,
   Title,
 } from "../../components/ui";
 import type { Routes, Visit } from "../../types";
-import { useAction } from "../core";
+import { message, useAction } from "../core";
 import { LocalWhisper, localWhisperAvailable } from "./localWhisper";
-import {
-  LocalClinicalAI,
-  localClinicalAIAvailable,
-} from "./localClinicalAI";
+import { LocalClinicalAI, localClinicalAIAvailable } from "./localClinicalAI";
 
 export function VisitScreen({
   route,
@@ -40,11 +38,20 @@ export function VisitScreen({
   const action = useAction();
   const setError = action.setError;
   const visitId = useRef<string | null>(null);
+  const creatingVisit = useRef<Promise<string> | null>(null);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const saveLatest = useRef<(() => Promise<string>) | null>(null);
+  const draftRevision = useRef(0);
   const [transcript, setTranscript] = useState("");
   const [step, setStep] = useState<"capture" | "review" | "done">("capture");
   const [evolution, setEvolution] = useState("");
   const [tasks, setTasks] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<
+    "idle" | "pending" | "saving" | "saved" | "error"
+  >("idle");
+  const [saveError, setSaveError] = useState("");
+  const [confirmingSave, setConfirmingSave] = useState(false);
   const [originalTranscript, setOriginalTranscript] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [audioReady, setAudioReady] = useState(false);
@@ -75,6 +82,17 @@ export function VisitScreen({
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [exitAction, setExitAction] = useState<NavigationAction | null>(null);
   const [allowExit, setAllowExit] = useState(false);
+  const dirtyDraft = Boolean(transcript.trim()) && !saved;
+  const dirtyDraftRef = useRef(dirtyDraft);
+  useEffect(() => {
+    dirtyDraftRef.current = dirtyDraft;
+  }, [dirtyDraft]);
+  const markDirty = () => {
+    draftRevision.current += 1;
+    setSaved(false);
+    setSaveState("pending");
+    setSaveError("");
+  };
   usePreventRemove(
     !allowExit &&
       step !== "done" &&
@@ -114,6 +132,7 @@ export function VisitScreen({
           setStep("review");
         }
         setSaved(true);
+        setSaveState("saved");
         setRestoring(false);
       })
       .catch((error) => {
@@ -150,16 +169,26 @@ export function VisitScreen({
           })
           .catch(() => setInterrupted(true));
       }
+      if (state !== "active" && dirtyDraftRef.current) {
+        void saveLatest.current?.().catch(() => {});
+      }
     });
     return () => listener.remove();
   }, [recorder]);
-  const ensureVisit = async () => {
-    if (!visitId.current)
-      visitId.current = (
-        await api<Visit>("/visits", "POST", { scan_id: route.params.scan_id })
-      ).id;
-    return visitId.current;
-  };
+  const ensureVisit = useCallback(async () => {
+    if (visitId.current) return visitId.current;
+    creatingVisit.current ??= api<Visit>("/visits", "POST", {
+      scan_id: route.params.scan_id,
+    })
+      .then((visit) => {
+        visitId.current = visit.id;
+        return visit.id;
+      })
+      .finally(() => {
+        creatingVisit.current = null;
+      });
+    return creatingVisit.current;
+  }, [route.params.scan_id]);
   const toggleRecord = () =>
     action.run(async () => {
       if (recording.isRecording) {
@@ -176,6 +205,7 @@ export function VisitScreen({
         throw new Error(
           "Activa el permiso del micrófono en los ajustes del teléfono o escribe la nota.",
         );
+      await ensureVisit();
       if (localMode) {
         setAudioReady(false);
         setLocalDuration(0);
@@ -202,7 +232,6 @@ export function VisitScreen({
         }
         return;
       }
-      await ensureVisit();
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
@@ -222,7 +251,7 @@ export function VisitScreen({
           if (!mounted.current) return;
           setTranscript(text);
           setOriginalTranscript(text);
-          setSaved(false);
+          markDirty();
         } finally {
           if (mounted.current) setLocalStatus("");
         }
@@ -244,20 +273,68 @@ export function VisitScreen({
       );
       setTranscript(result.transcript);
       setOriginalTranscript(result.transcript);
-      setSaved(false);
+      markDirty();
     });
-  const saveDraft = async () => {
-    const id = await ensureVisit();
-    await api(`/visits/${id}/draft`, "PATCH", {
+  const saveDraft = useCallback(async () => {
+    const revision = draftRevision.current;
+    const snapshot = {
       transcript,
       ...(step === "review"
-        ? { evolution, tasks: tasks.split("\n").filter((item) => item.trim()) }
+        ? {
+            evolution,
+            tasks: tasks.split("\n").filter((item) => item.trim()),
+          }
         : {}),
-    });
-    setSaved(true);
-    setAudioReady(false);
-    return id;
-  };
+    };
+    if (mounted.current) {
+      setSaveState("saving");
+      setSaveError("");
+    }
+
+    const perform = async () => {
+      try {
+        const id = await ensureVisit();
+        await api(`/visits/${id}/draft`, "PATCH", snapshot);
+        if (mounted.current && draftRevision.current === revision) {
+          setSaved(true);
+          setSaveState("saved");
+          setAudioReady(false);
+        }
+        return id;
+      } catch (error) {
+        if (mounted.current) {
+          setSaveState("error");
+          setSaveError(message(error));
+        }
+        throw error;
+      }
+    };
+
+    const result = saveQueue.current.then(perform, perform);
+    saveQueue.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }, [ensureVisit, evolution, step, tasks, transcript]);
+  useEffect(() => {
+    saveLatest.current = saveDraft;
+  }, [saveDraft]);
+
+  useEffect(() => {
+    if (
+      restoring ||
+      saved ||
+      !transcript.trim() ||
+      recording.isRecording ||
+      step === "done"
+    )
+      return;
+    const timer = setTimeout(() => {
+      void saveDraft().catch(() => {});
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [recording.isRecording, restoring, saveDraft, saved, step, transcript]);
   const review = () =>
     action.run(async () => {
       const id = await saveDraft();
@@ -273,38 +350,30 @@ export function VisitScreen({
             setLocalStatus("Preparando propuesta clínica en el teléfono…");
           }
 
-          const localProposal = await ai.structure(
-            transcript,
-            (text) => {
-              if (mounted.current) setLocalStatus(text);
-            },
-          );
+          const localProposal = await ai.structure(transcript, (text) => {
+            if (mounted.current) setLocalStatus(text);
+          });
 
-          proposal = await api<Visit>(
-            `/visits/${id}/local-structure`,
-            "POST",
-            {
-              evolution: localProposal.evolution.map(
-                ({ text, source_span }) => ({ text, source_span }),
-              ),
-              tasks: localProposal.tasks.map(
-                ({ text, source_span }) => ({ text, source_span }),
-              ),
-              uncertainties: localProposal.uncertainties.map(
-                ({ text, source_span }) => ({ text, source_span }),
-              ),
-              suggested_evolution: localProposal.suggested_evolution,
-              redaction_method: localProposal.redaction_method,
-            },
-          );
+          proposal = await api<Visit>(`/visits/${id}/local-structure`, "POST", {
+            evolution: localProposal.evolution.map(({ text, source_span }) => ({
+              text,
+              source_span,
+            })),
+            tasks: localProposal.tasks.map(({ text, source_span }) => ({
+              text,
+              source_span,
+            })),
+            uncertainties: localProposal.uncertainties.map(
+              ({ text, source_span }) => ({ text, source_span }),
+            ),
+            suggested_evolution: localProposal.suggested_evolution,
+            redaction_method: localProposal.redaction_method,
+          });
         } finally {
           if (mounted.current) setLocalStatus("");
         }
       } else {
-        proposal = await api<Visit>(
-          `/visits/${id}/structure`,
-          "POST",
-        );
+        proposal = await api<Visit>(`/visits/${id}/structure`, "POST");
       }
 
       if (!mounted.current) return;
@@ -313,9 +382,7 @@ export function VisitScreen({
         proposal.note.evolution?.map((item) => item.text).join("\n") ||
           transcript,
       );
-      setTasks(
-        proposal.note.tasks?.map((item) => item.text).join("\n") || "",
-      );
+      setTasks(proposal.note.tasks?.map((item) => item.text).join("\n") || "");
       setSuggestion(proposal.note.suggested_evolution || "");
       setStep("review");
     });
@@ -326,6 +393,7 @@ export function VisitScreen({
         evolution,
         tasks: tasks.split("\n").filter((item) => item.trim()),
       });
+      setConfirmingSave(false);
       setStep("done");
     });
   const discard = () =>
@@ -498,7 +566,7 @@ export function VisitScreen({
             editable={!recording.isRecording && !action.busy}
             onChangeText={(text) => {
               setTranscript(text);
-              setSaved(false);
+              markDirty();
             }}
           />
           {Boolean(originalTranscript) && (
@@ -507,24 +575,36 @@ export function VisitScreen({
               <Body muted>{originalTranscript}</Body>
             </Card>
           )}
-          {saved && <Badge>BORRADOR GUARDADO EN EL SERVIDOR</Badge>}
+          {saveState !== "idle" && (
+            <View style={{ gap: 10 }}>
+              <Badge>
+                {saveState === "saved"
+                  ? "BORRADOR GUARDADO · RECUPERACIÓN ACTIVA"
+                  : saveState === "error"
+                    ? "AUTOGUARDADO PENDIENTE"
+                    : "AUTOGUARDANDO…"}
+              </Badge>
+              {saveState === "error" && (
+                <>
+                  <Notice
+                    error
+                    text={`${saveError} Mantén esta pantalla abierta y vuelve a intentarlo.`}
+                  />
+                  <Button
+                    title="Reintentar autoguardado"
+                    secondary
+                    onPress={() => void saveDraft().catch(() => {})}
+                  />
+                </>
+              )}
+            </View>
+          )}
           <Button
             title="Preparar nota para revisión"
             icon="arrow-right"
             disabled={!transcript.trim() || recording.isRecording}
             loading={action.busy}
             onPress={review}
-          />
-          <Button
-            title="Guardar borrador"
-            secondary
-            disabled={!transcript.trim() || recording.isRecording}
-            loading={action.busy}
-            onPress={() =>
-              action.run(async () => {
-                await saveDraft();
-              })
-            }
           />
         </>
       ) : (
@@ -541,7 +621,7 @@ export function VisitScreen({
                 disabled={action.busy}
                 onPress={() => {
                   setEvolution(suggestion);
-                  setSaved(false);
+                  markDirty();
                 }}
               />
             </Card>
@@ -553,7 +633,7 @@ export function VisitScreen({
             editable={!action.busy}
             onChangeText={(text) => {
               setEvolution(text);
-              setSaved(false);
+              markDirty();
             }}
           />
           <Field
@@ -563,7 +643,7 @@ export function VisitScreen({
             editable={!action.busy}
             onChangeText={(text) => {
               setTasks(text);
-              setSaved(false);
+              markDirty();
             }}
           />
           <Card>
@@ -571,23 +651,30 @@ export function VisitScreen({
             <Body muted>{originalTranscript || transcript}</Body>
           </Card>
           <Button
-            title="Confirmar y guardar nota"
+            title="Revisar paciente y guardar"
             icon="check"
             loading={action.busy}
             disabled={!evolution.trim()}
-            onPress={confirm}
+            onPress={() => setConfirmingSave(true)}
           />
-          <Button
-            title="Guardar revisión como borrador"
-            secondary
-            loading={action.busy}
-            onPress={() =>
-              action.run(async () => {
-                await saveDraft();
-              })
-            }
-          />
-          {saved && <Badge>BORRADOR GUARDADO EN EL SERVIDOR</Badge>}
+          {saveState !== "idle" && (
+            <View style={{ gap: 10 }}>
+              <Badge>
+                {saveState === "saved"
+                  ? "BORRADOR GUARDADO · RECUPERACIÓN ACTIVA"
+                  : saveState === "error"
+                    ? "AUTOGUARDADO PENDIENTE"
+                    : "AUTOGUARDANDO…"}
+              </Badge>
+              {saveState === "error" && (
+                <Button
+                  title="Reintentar autoguardado"
+                  secondary
+                  onPress={() => void saveDraft().catch(() => {})}
+                />
+              )}
+            </View>
+          )}
           <Button
             title="Volver a editar transcripción"
             secondary
@@ -647,6 +734,43 @@ export function VisitScreen({
                   }
                 />
               )}
+            {Boolean(action.error) && <Notice error text={action.error} />}
+          </Card>
+        </View>
+      </Modal>
+      <Modal
+        transparent
+        visible={confirmingSave}
+        onRequestClose={() => setConfirmingSave(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            padding: 24,
+            backgroundColor: "#19343ACC",
+          }}
+        >
+          <Card>
+            <Label>CONFIRMACIÓN FINAL</Label>
+            <Text style={s.subtitle}>
+              ¿Guardar esta evolución en este paciente?
+            </Text>
+            <PatientIdentity patient={route.params.patient} />
+            <Notice text="Comprueba nombre, documento, cama y servicio. Al confirmar, la evolución formará parte de esta historia clínica." />
+            <Button
+              title={`Guardar en ${route.params.patient.name}`}
+              icon="check"
+              loading={action.busy}
+              disabled={!evolution.trim()}
+              onPress={confirm}
+            />
+            <Button
+              title="Volver a revisar"
+              secondary
+              disabled={action.busy}
+              onPress={() => setConfirmingSave(false)}
+            />
             {Boolean(action.error) && <Notice error text={action.error} />}
           </Card>
         </View>

@@ -2,26 +2,38 @@
   "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
   "build": {
     "clinical-apk": {
+      "channel": "production",
       "distribution": "internal",
       "environment": "production",
-      "env": { "APP_VARIANT": "production", "APP_IDENTIFIER": "app.nicolasorti.rapiclinics", "EXPO_PUBLIC_API_URL": "https://rapiclinics-api-test.onrender.com", "NFC_UID_DEMO": "1" },
+      "env": {
+        "APP_VARIANT": "production",
+        "APP_IDENTIFIER": "app.nicolasorti.rapiclinics",
+        "EXPO_PUBLIC_API_URL": "https://rapiclinics-api-test.onrender.com"
+      },
       "android": { "buildType": "apk" }
     },
     "android-demo": {
       "extends": "device",
+      "channel": "preview",
       "env": {
         "APP_VARIANT": "device",
         "APP_IDENTIFIER": "app.nicolasorti.rapiclinics.demo",
         "EXPO_PUBLIC_API_URL": "http://192.168.1.4:8083"
       }
     },
-    "development": { "developmentClient": true, "distribution": "internal" },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
+    },
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "ios": { "simulator": true }
     },
     "device": {
+      "channel": "preview",
       "distribution": "internal",
       "environment": "preview",
       "env": { "APP_VARIANT": "device" },
@@ -29,6 +41,7 @@
       "ios": { "simulator": false }
     },
     "production": {
+      "channel": "production",
       "autoIncrement": true,
       "env": { "APP_VARIANT": "production" },
       "android": { "buildType": "app-bundle" }

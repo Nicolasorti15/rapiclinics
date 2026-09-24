@@ -183,17 +183,25 @@ export function Empty({ title, text }: { title: string; text: string }) {
 }
 export function PatientIdentity({ patient }: { patient: Patient }) {
   return (
-    <View style={s.identity}>
+    <View
+      accessible
+      accessibilityLabel={`${patient.name}. Cama ${patient.bed}. Servicio ${patient.service}. Documento ${patient.identifier}.`}
+      style={s.identity}
+    >
       <View style={s.avatar}>
         <Icon name="user" />
       </View>
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={s.subtitle}>{patient.name}</Text>
-        <Text style={s.small}>
-          {patient.identifier} · Cama {patient.bed}
+        <Text style={s.small}>{patient.identifier}</Text>
+        <Text style={[s.small, { color: c.teal, fontWeight: "700" }]}>
+          {patient.service}
         </Text>
       </View>
-      <Icon name="shield" size={19} />
+      <View style={s.bedBadge}>
+        <Text style={s.bedBadgeLabel}>CAMA</Text>
+        <Text style={s.bedBadgeValue}>{patient.bed}</Text>
+      </View>
     </View>
   );
 }
@@ -371,6 +379,22 @@ export const s = StyleSheet.create({
     borderColor: c.line,
     borderRadius: 16,
   },
+  bedBadge: {
+    minWidth: 66,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: c.teal,
+    alignItems: "center",
+    gap: 2,
+  },
+  bedBadgeLabel: {
+    color: "#D9F0EC",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  bedBadgeValue: { color: c.white, fontSize: 17, fontWeight: "800" },
   avatar: {
     width: 44,
     height: 44,

@@ -8,6 +8,8 @@ Los pendientes se pueden consultar por servicio o desde la ficha de cada pacient
 
 **Estado:** demo funcional en desarrollo y configuración de distribución preparada. Todavía no hay AAB/IPA firmados ni publicación en las tiendas. La transcripción usa Whisper local en el servidor; la propuesta de redacción actual aplica reglas conservadoras, no un modelo generativo. NFC/grabación nativos requieren validación física. Consultar [publicación](docs/publicacion.md) antes de distribuir.
 
+La versión Android 1.4.0 incorpora EAS Update: después de instalar su APK base, puede recibir cambios compatibles de interfaz y lógica al abrir la app, sin reinstalar. Los cambios nativos siguen requiriendo un APK nuevo. Consulta [actualizaciones OTA](docs/actualizaciones-ota.md).
+
 Laboratorio permite subir varios PDF con texto o CSV, revisar identidad y valores y confirmar su inclusión en gráficas interactivas por variable, unidad y fecha. Incluye datos sintéticos en `fixtures/laboratorio`. Consulta [laboratorio](docs/laboratorio.md) y [diseño del asistente de redacción](docs/ia-redaccion.md).
 
 ## Ejecutar en Windows sin Docker

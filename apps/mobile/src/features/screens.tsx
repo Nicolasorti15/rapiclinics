@@ -556,8 +556,15 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
     <Page patient={patient}>
       <View style={{ gap: 8 }}>
         <Badge>IDENTIDAD CONFIRMADA</Badge>
-        <Title>Una mirada a la visita</Title>
+        <Title>Paciente actual</Title>
       </View>
+      {session?.user.role !== "ADMIN" && (
+        <Button
+          title="Nueva evolución"
+          icon="edit-3"
+          onPress={() => navigation.navigate("Visit", route.params)}
+        />
+      )}
       {isAdmin(session?.user.role) && (
         <Button
           title="Administrar etiqueta NFC"
@@ -588,11 +595,6 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
             onResume={(visit_id) =>
               navigation.navigate("Visit", { ...route.params, visit_id })
             }
-          />
-          <Button
-            title="Registrar visita"
-            icon="mic"
-            onPress={() => navigation.navigate("Visit", route.params)}
           />
         </>
       )}
@@ -825,7 +827,7 @@ export function SettingsScreen({ navigation }: Props<"Settings">) {
           onPress={() => navigation.navigate("Privacy")}
         />
         <Text style={s.small}>
-          RAPICLINICS · Versión 1.3.0{"\n"}
+          RAPICLINICS · Versión 1.4.0{"\n"}
           {session?.user.clinic_name}
         </Text>
       </Card>

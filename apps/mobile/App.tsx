@@ -26,6 +26,7 @@ import {
 import { Button, c, Loading } from "./src/components/ui";
 import type { Routes } from "./src/types";
 import { LabsScreen } from "./src/features/labs/LabsScreen";
+import { AppUpdateGate } from "./src/features/AppUpdateGate";
 
 import {
   AdminScreen,
@@ -177,9 +178,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <AuthProvider>
-        <Root />
-      </AuthProvider>
+      <AppUpdateGate>
+        <AuthProvider>
+          <Root />
+        </AuthProvider>
+      </AppUpdateGate>
     </SafeAreaProvider>
   );
 }
