@@ -1,8 +1,8 @@
 # Transcripción local en Android
 
-La app Android compilada usa `whisper.rn@0.7.4` con `ggml-tiny.bin` multilingüe (no `tiny.en`). La primera grabación descarga 77.691.713 bytes desde la revisión fija `5359861c739e955e79d9a303bcbc70fb988958b1` de `ggerganov/whisper.cpp`. Se descarga a un archivo temporal, se verifica estado HTTP y tamaño, y se mueve al almacenamiento privado. Una descarga fallida se puede reintentar. No se incluye el modelo en Git ni se descarga durante EAS.
+La app Android compilada usa `whisper.rn@0.7.4` con `ggml-small-q5_1.bin` multilingüe. La primera grabación descarga 190.085.487 bytes desde la revisión fija `5359861c739e955e79d9a303bcbc70fb988958b1` de `ggerganov/whisper.cpp`. Se descarga a un archivo temporal, se verifica estado HTTP y tamaño, y se mueve al almacenamiento privado. Una descarga fallida se puede reintentar. No se incluye el modelo en Git ni se descarga durante EAS. Al instalarlo se eliminan los modelos `tiny` y `base` anteriores para recuperar espacio.
 
-El micrófono entrega PCM16 mono a 16 kHz mediante `@fugood/react-native-audio-pcm-stream@1.1.4`. Se convierte a float32 para `transcribeData`, con `language: es` y `translate: false`. El límite efectivo es de 180 segundos de muestras. El audio queda solo en memoria y desaparece al abandonar la pantalla; el modelo queda guardado para uso sin conexión. El texto se revisa y se envía por el endpoint existente `/draft`; no se llama a `/audio` ni `/transcribe` en el modo local. La transcripción local se conserva como texto editable; no se añade un campo de procedencia al servidor.
+El micrófono entrega PCM16 mono a 16 kHz mediante `@fugood/react-native-audio-pcm-stream@1.1.4`. `transcribeData` recibe ese PCM crudo con español fijo, búsqueda de haz 8 y un contexto de términos clínicos. El límite efectivo es de 180 segundos. Antes de transcribir se calcula duración, RMS, pico y proporción de muestras recortadas; una grabación menor de un segundo, prácticamente silenciosa o saturada se rechaza con una indicación concreta. El audio queda solo en memoria y desaparece al abandonar la pantalla; el modelo queda guardado para uso sin conexión. El texto se revisa y se envía por `/draft`; no se llama a `/audio` ni `/transcribe` en el modo local. El servidor conserva por separado la transcripción automática original y la corrección del médico.
 
 El botón de cambio a servidor descarta el audio local y requiere una nueva grabación. Solo el botón «Enviar audio y transcribir en servidor» sube esa grabación. No hay respaldo automático. Web, iOS y Expo Go conservan la ruta de servidor y no cargan módulos Whisper/PCM.
 
@@ -16,12 +16,12 @@ El botón de cambio a servidor descarta el audio local y requiere una nueva grab
 
 Desde `apps/mobile`: `npm.cmd run typecheck`, `npm.cmd test` y `npx.cmd expo export --platform android --output-dir dist/whisper-check`. La exportación comprueba el bundle JavaScript; no compila Java/C++ ni verifica JSI o el micrófono real.
 
-Antes de usar la función, generar un APK nuevo mediante Expo/EAS (pendiente; no ejecutado en esta tarea). Un APK anterior no contiene estas dependencias ni la corrección de stop. Verificar en teléfono:
+El APK clínico 1.4.0 ya contiene las dependencias nativas; los cambios de modelo, parámetros y control de calidad se distribuyen por EAS Update. Verificar en teléfono:
 
 1. Primera descarga con conexión; interrumpirla y reintentar. Denegar permiso del micrófono y comprobar que se puede escribir o cambiar a servidor.
 2. Con modelo descargado, abrir una visita y desactivar red: grabar español, detener, transcribir y corregir. Restaurar conexión para guardar; comprobar en la API que solo llegan texto y solicitudes de visita.
 3. Detener y volver a grabar repetidamente; salir al fondo durante grabación; alcanzar tres minutos. Comprobar que el micrófono se libera y la app no se bloquea.
 4. Cambiar explícitamente a servidor, volver a grabar y verificar la ruta existente de subida. Revisar que un fallo local no suba audio.
-5. Probar el NFC UID actual con el perfil `clinical-apk`, que conserva `NFC_UID_DEMO=1`.
+5. Probar NFC físico con el perfil `clinical-apk`; el modo UID simulado permanece desactivado.
 
-Whisper tiny puede producir errores: revisar el texto antes de confirmar. La compatibilidad nativa con React Native 0.86 y el rendimiento en el dispositivo requieren el APK; los tests con dobles de módulos nativos no los demuestran.
+Whisper puede producir errores incluso con el modelo mejorado: revisar nombres, medicamentos, dosis, cifras y negaciones antes de confirmar. La compatibilidad nativa y el rendimiento real requieren validación en teléfonos representativos; los tests con dobles de módulos nativos no lo demuestran.

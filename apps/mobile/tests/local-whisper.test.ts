@@ -44,7 +44,7 @@ vi.mock("whisper.rn/index", () => ({ initWhisper: mocks.whisperInit }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.info.mockResolvedValue({ exists: true, size: 147951465 });
+  mocks.info.mockResolvedValue({ exists: true, size: 190085487 });
   mocks.stop.mockResolvedValue(undefined);
   mocks.on.mockReturnValue({ remove: mocks.removeListener });
   mocks.whisperInit.mockResolvedValue({
@@ -58,7 +58,10 @@ beforeEach(() => {
 });
 const start = (local: LocalWhisper) => local.start(vi.fn(), vi.fn(), vi.fn());
 function feed() {
-  mocks.on.mock.calls[0][1](Buffer.from([0, 64, 0, 128]).toString("base64"));
+  const pcm = Buffer.alloc(16000 * 2);
+  for (let index = 0; index < 16000; index += 1)
+    pcm.writeInt16LE(index % 2 ? -4096 : 4096, index * 2);
+  mocks.on.mock.calls[0][1](pcm.toString("base64"));
 }
 
 it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish without uploading audio", async () => {
@@ -74,15 +77,15 @@ it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish w
       bitsPerSample: 16,
     }),
   );
-  expect(Array.from(new Uint8Array(mocks.transcribe.mock.calls[0][0]))).toEqual(
-    [0, 64, 0, 128],
-  );
+  expect(
+    Array.from(new Uint8Array(mocks.transcribe.mock.calls[0][0]).slice(0, 4)),
+  ).toEqual([0, 16, 0, 240]);
   expect(mocks.transcribe.mock.calls[0][1]).toEqual({
     language: "es",
     translate: false,
     prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-    beamSize: 5,
-    bestOf: 5,
+    beamSize: 8,
+    bestOf: 8,
     temperature: 0,
   });
   expect(mocks.release).toHaveBeenCalledOnce();
@@ -144,19 +147,23 @@ it("does not start recording if the screen closes during model preparation", asy
 it("installs a complete model through a temporary file before opening the microphone", async () => {
   mocks.info
     .mockResolvedValueOnce({ exists: false })
-    .mockResolvedValueOnce({ exists: true, size: 147951465 });
+    .mockResolvedValueOnce({ exists: true, size: 190085487 });
   mocks.download.mockResolvedValue({ status: 200 });
   const local = new LocalWhisper();
   await start(local);
   expect(mocks.download.mock.calls[0][0]).toMatch(
-    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-base.bin$/,
+    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-small-q5_1.bin$/,
   );
   expect(mocks.move).toHaveBeenCalledWith({
-    from: "file:///private/whisper-base-multilingual.bin.partial",
-    to: "file:///private/whisper-base-multilingual.bin",
+    from: "file:///private/whisper-small-q5-clinical.bin.partial",
+    to: "file:///private/whisper-small-q5-clinical.bin",
   });
   expect(mocks.removeFile).toHaveBeenCalledWith(
     "file:///private/whisper-tiny-multilingual.bin",
+    { idempotent: true },
+  );
+  expect(mocks.removeFile).toHaveBeenCalledWith(
+    "file:///private/whisper-base-multilingual.bin",
     { idempotent: true },
   );
   expect(mocks.start).toHaveBeenCalledOnce();

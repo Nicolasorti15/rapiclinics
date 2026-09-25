@@ -531,7 +531,7 @@ export function VisitScreen({
           <Notice
             text={
               localMode
-                ? "Whisper base multilingüe transcribe en español con contexto de vocabulario clínico. La primera grabación descarga el modelo (148 MB); luego puedes dictar sin conexión hasta 3 minutos. Al guardar se envía solo texto. Revisa siempre nombres, dosis, cifras y negaciones."
+                ? "Whisper small cuantizado transcribe en español con búsqueda reforzada y vocabulario clínico. La primera grabación descarga el modelo de alta precisión (190 MB); luego puedes dictar sin conexión hasta 3 minutos. La app rechazará audio demasiado bajo o saturado. Revisa siempre nombres, dosis, cifras y negaciones."
                 : "Modo servidor: al pulsar transcribir se sube el audio. Dicta hasta 3 minutos y revisa siempre el resultado."
             }
           />

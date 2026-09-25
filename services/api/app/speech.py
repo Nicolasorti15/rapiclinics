@@ -10,16 +10,26 @@ from fastapi import HTTPException
 _inference = threading.Lock()
 
 MEDICAL_PROMPT = (
-    "Evolución clínica en español. Paciente, signos vitales, presión arterial, frecuencia cardíaca, "
-    "frecuencia respiratoria, saturación de oxígeno, temperatura, dolor, consciente, orientado, "
-    "cefalea, disnea, náuseas, vómito, diuresis, hemoglobina, hematocrito, leucocitos, neutrófilos, "
-    "plaquetas, creatinina, glucosa, sodio, potasio, diagnóstico, tratamiento, medicamento, dosis, "
-    "miligramos, intravenoso, vía oral, alergias, pendiente, control y seguimiento."
+    "Dictado médico de evolución clínica en español colombiano. Conserva negaciones, cifras, "
+    "decimales, fechas, dosis y unidades. Paciente niega, sin evidencia de, no presenta, signos "
+    "vitales, presión arterial, frecuencia cardíaca, frecuencia respiratoria, saturación de oxígeno, "
+    "temperatura, dolor, consciente, orientado, cefalea, disnea, náuseas, vómito, diuresis, balance "
+    "hídrico, hemoglobina, hematocrito, leucocitos, neutrófilos, linfocitos, plaquetas, creatinina, "
+    "BUN, glucosa, sodio, potasio, cloro, calcio, proteína C reactiva, INR, diagnóstico, tratamiento, "
+    "medicamento, dosis, miligramos, microgramos, mililitros, cada ocho horas, intravenoso, "
+    "intramuscular, subcutáneo, vía oral, alergias, pendiente, control y seguimiento."
 )
 MEDICAL_HOTWORDS = (
     "presión arterial frecuencia cardíaca frecuencia respiratoria saturación hemoglobina hematocrito "
-    "leucocitos neutrófilos plaquetas creatinina intravenoso alergias"
+    "leucocitos neutrófilos linfocitos plaquetas creatinina BUN sodio potasio proteína C reactiva "
+    "intravenoso intramuscular subcutáneo alergias paciente niega no presenta"
 )
+
+
+def configured_model():
+    configured = os.getenv("WHISPER_MODEL", "base").strip()
+    # Tiny produced unacceptable medication, number and negation errors in clinical dictation.
+    return "base" if configured in {"tiny", "tiny.en"} else configured
 
 
 @lru_cache(maxsize=1)
@@ -27,7 +37,7 @@ def model():
     from faster_whisper import WhisperModel
 
     return WhisperModel(
-        os.getenv("WHISPER_MODEL", "small"),
+        configured_model(),
         device="cpu",
         compute_type="int8",
         cpu_threads=max(1, int(os.getenv("WHISPER_CPU_THREADS", "4"))),
@@ -63,9 +73,21 @@ def decode(content: bytes):
         raise HTTPException(422, "No se pudo leer el audio. Vuelve a grabarlo.") from exc
 
 
+def validate_audio_quality(audio):
+    import numpy as np
+
+    rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
+    clipped_ratio = float(np.mean(np.abs(audio) >= 0.99))
+    if rms < 0.003:
+        raise HTTPException(422, "El audio se escucha demasiado bajo. Acerca el teléfono y vuelve a grabar.")
+    if clipped_ratio > 0.15:
+        raise HTTPException(422, "El audio está saturado. Aleja un poco el teléfono y vuelve a grabar.")
+
+
 class LocalSpeechToText:
     def transcribe(self, content: bytes) -> str:
         audio = decode(content)
+        validate_audio_quality(audio)
         if not _inference.acquire(blocking=False):
             raise HTTPException(503, "Hay otra transcripción en curso. Inténtalo en unos momentos.")
         try:

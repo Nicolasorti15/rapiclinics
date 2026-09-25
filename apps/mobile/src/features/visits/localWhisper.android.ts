@@ -6,8 +6,8 @@ import { MEDICAL_TRANSCRIPTION_PROMPT } from "./medicalVocabulary";
 export const localWhisperAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 const MODEL_URL =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin";
-const MODEL_SIZE = 147951465;
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin";
+const MODEL_SIZE = 190085487;
 type Stream = {
   init(options: {
     sampleRate: number;
@@ -44,10 +44,10 @@ export class LocalWhisper {
     const fs = await import("expo-file-system/legacy");
     if (!fs.documentDirectory)
       throw new Error("No hay almacenamiento disponible para el modelo.");
-    const path = fs.documentDirectory + "whisper-base-multilingual.bin";
+    const path = fs.documentDirectory + "whisper-small-q5-clinical.bin";
     const info = await fs.getInfoAsync(path);
     if (!info.exists || info.size !== MODEL_SIZE) {
-      onStatus("Descargando modelo clínico mejorado (148 MB)…");
+      onStatus("Descargando modelo clínico de alta precisión (190 MB)…");
       const partial = path + ".partial";
       try {
         const response = await fs.downloadAsync(MODEL_URL, partial);
@@ -64,6 +64,10 @@ export class LocalWhisper {
         await fs.moveAsync({ from: partial, to: path });
         await fs.deleteAsync(
           fs.documentDirectory + "whisper-tiny-multilingual.bin",
+          { idempotent: true },
+        );
+        await fs.deleteAsync(
+          fs.documentDirectory + "whisper-base-multilingual.bin",
           { idempotent: true },
         );
       } finally {
@@ -118,6 +122,7 @@ export class LocalWhisper {
   async transcribe(): Promise<string> {
     await this.stop();
     const data = this.capture.data();
+    this.capture.assertUsable();
     if (!this.modelPath || this.closed)
       throw new Error("Graba un audio primero.");
     const { initWhisper } = await import("whisper.rn/index");
@@ -131,8 +136,8 @@ export class LocalWhisper {
         language: "es",
         translate: false,
         prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-        beamSize: 5,
-        bestOf: 5,
+        beamSize: 8,
+        bestOf: 8,
         temperature: 0,
       });
       const result = await this.job.promise;

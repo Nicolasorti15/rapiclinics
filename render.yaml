@@ -25,7 +25,7 @@ services:
       - key: CORS_ORIGINS
         value: ""
       - key: WHISPER_MODEL
-        value: tiny
+        value: base
       - key: WHISPER_CPU_THREADS
         value: "1"
       - key: INITIAL_CLINIC_NAME
