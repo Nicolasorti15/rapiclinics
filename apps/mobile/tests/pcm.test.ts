@@ -75,3 +75,19 @@ it("measures usable audio and rejects silence, short recordings and clipping", (
     clippedRatio: 0,
   });
 });
+
+it("trims clear leading and trailing silence while keeping speech padding", () => {
+  const capture = new PcmCapture();
+  capture.append(new Uint8Array(16000 * 2));
+
+  const voice = new Uint8Array(16000 * 2);
+  const view = new DataView(voice.buffer);
+  for (let index = 0; index < 16000; index += 1)
+    view.setInt16(index * 2, index % 2 ? -4096 : 4096, true);
+
+  capture.append(voice);
+  capture.append(new Uint8Array(16000 * 2));
+
+  expect(capture.data().byteLength).toBe(16000 * 2 * 3);
+  expect(capture.transcriptionData().byteLength).toBe(16000 * 2 * 1.6);
+});

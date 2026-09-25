@@ -1,5 +1,8 @@
 export const MAX_SAMPLES = 16000 * 180;
 const BYTES_PER_SAMPLE = 2;
+const SAMPLE_RATE = 16000;
+const SILENCE_FRAME_SAMPLES = 320;
+const SILENCE_PADDING_SAMPLES = SAMPLE_RATE * 0.3;
 
 // Android streams raw signed little-endian PCM16.
 // whisper.rn transcribeData() expects raw PCM16, mono, 16 kHz.
@@ -70,6 +73,49 @@ export class PcmCapture {
     }
 
     return result.buffer;
+  }
+
+  transcriptionData(): ArrayBuffer {
+    const raw = this.data();
+    const bytes = new Uint8Array(raw);
+    const view = new DataView(raw);
+    const quality = this.quality();
+    const threshold = Math.max(0.0025, Math.min(0.012, quality.rms * 0.35));
+    let firstSpeechSample = -1;
+    let lastSpeechSample = -1;
+
+    for (
+      let frameStart = 0;
+      frameStart < this.count;
+      frameStart += SILENCE_FRAME_SAMPLES
+    ) {
+      const frameEnd = Math.min(frameStart + SILENCE_FRAME_SAMPLES, this.count);
+      let squaredAmplitude = 0;
+
+      for (let sample = frameStart; sample < frameEnd; sample += 1) {
+        const amplitude =
+          view.getInt16(sample * BYTES_PER_SAMPLE, true) / 32768;
+        squaredAmplitude += amplitude * amplitude;
+      }
+
+      const rms = Math.sqrt(squaredAmplitude / (frameEnd - frameStart));
+      if (rms >= threshold) {
+        if (firstSpeechSample < 0) firstSpeechSample = frameStart;
+        lastSpeechSample = frameEnd;
+      }
+    }
+
+    if (firstSpeechSample < 0 || lastSpeechSample < 0) return raw;
+
+    const start = Math.max(0, firstSpeechSample - SILENCE_PADDING_SAMPLES);
+    const end = Math.min(
+      this.count,
+      lastSpeechSample + SILENCE_PADDING_SAMPLES,
+    );
+
+    if (start === 0 && end === this.count) return raw;
+
+    return bytes.slice(start * BYTES_PER_SAMPLE, end * BYTES_PER_SAMPLE).buffer;
   }
 
   quality() {

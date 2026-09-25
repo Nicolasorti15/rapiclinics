@@ -26,6 +26,8 @@ export class LocalWhisper {
   private stream?: Stream;
   private listener?: { remove(): void };
   private job?: ReturnType<WhisperContext["transcribeData"]>;
+  private context?: WhisperContext;
+  private contextPromise?: Promise<WhisperContext>;
   private closed = false;
   private recording = false;
   private modelPath?: string;
@@ -80,6 +82,7 @@ export class LocalWhisper {
     }
     if (this.closed) throw new Error("Grabación cancelada.");
     this.modelPath = path;
+    void this.prepareContext().catch(() => {});
     // Import only on Android outside Expo Go; the published PCM typings name a different package.
     const pcmModule =
       // @ts-expect-error The installed 1.1.4 declaration is not a module.
@@ -110,6 +113,34 @@ export class LocalWhisper {
     onStatus("");
   }
 
+  private prepareContext(): Promise<WhisperContext> {
+    if (this.context) return Promise.resolve(this.context);
+    if (this.contextPromise) return this.contextPromise;
+    if (!this.modelPath)
+      return Promise.reject(new Error("Modelo no disponible."));
+
+    this.contextPromise = import("whisper.rn/index")
+      .then(({ initWhisper }) =>
+        initWhisper({
+          filePath: this.modelPath!,
+          useGpu: false,
+        }),
+      )
+      .then(async (context) => {
+        if (this.closed) {
+          await context.release();
+          throw new Error("Transcripción cancelada.");
+        }
+        this.context = context;
+        return context;
+      })
+      .finally(() => {
+        this.contextPromise = undefined;
+      });
+
+    return this.contextPromise;
+  }
+
   stop(): Promise<void> {
     if (this.stopping) return this.stopping;
     if (!this.recording) return Promise.resolve();
@@ -125,25 +156,21 @@ export class LocalWhisper {
 
   async transcribe(): Promise<string> {
     await this.stop();
-    const data = this.capture.data();
     this.capture.assertUsable();
-    if (!this.modelPath || this.closed)
-      throw new Error("Graba un audio primero.");
-    const { initWhisper } = await import("whisper.rn/index");
-    const context = await initWhisper({
-      filePath: this.modelPath,
-      useGpu: false,
+    const data = this.capture.transcriptionData();
+    if (this.closed) throw new Error("Transcripción cancelada.");
+    if (!this.modelPath) throw new Error("Graba un audio primero.");
+    const context = await this.prepareContext();
+    if (this.closed) throw new Error("Transcripción cancelada.");
+    this.job = context.transcribeData(data, {
+      language: "es",
+      translate: false,
+      prompt: MEDICAL_TRANSCRIPTION_PROMPT,
+      beamSize: 2,
+      bestOf: 2,
+      temperature: 0,
     });
     try {
-      if (this.closed) throw new Error("Transcripción cancelada.");
-      this.job = context.transcribeData(data, {
-        language: "es",
-        translate: false,
-        prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-        beamSize: 3,
-        bestOf: 3,
-        temperature: 0,
-      });
       const result = await this.job.promise;
       if (result.isAborted || this.closed)
         throw new Error("Transcripción cancelada.");
@@ -154,7 +181,6 @@ export class LocalWhisper {
       return result.result.trim();
     } finally {
       this.job = undefined;
-      await context.release();
     }
   }
 
@@ -162,6 +188,9 @@ export class LocalWhisper {
     this.closed = true;
     await this.stop();
     await this.job?.stop();
+    await this.contextPromise?.catch(() => {});
+    await this.context?.release();
+    this.context = undefined;
     this.capture.clear();
   }
 }

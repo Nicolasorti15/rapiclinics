@@ -100,6 +100,7 @@ class LocalSpeechToText:
                 vad_filter=True,
                 vad_parameters={"min_silence_duration_ms": 350, "speech_pad_ms": 250},
                 condition_on_previous_text=False,
+                without_timestamps=True,
                 initial_prompt=MEDICAL_PROMPT,
                 hotwords=MEDICAL_HOTWORDS,
             )

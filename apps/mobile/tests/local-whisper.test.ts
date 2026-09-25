@@ -84,13 +84,32 @@ it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish w
     language: "es",
     translate: false,
     prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-    beamSize: 3,
-    bestOf: 3,
+    beamSize: 2,
+    bestOf: 2,
     temperature: 0,
   });
-  expect(mocks.release).toHaveBeenCalledOnce();
+  expect(mocks.release).not.toHaveBeenCalled();
   expect(mocks.removeListener).toHaveBeenCalledOnce();
   await local.dispose();
+  expect(mocks.release).toHaveBeenCalledOnce();
+});
+
+it("warms Whisper while recording and reuses one context for another recording", async () => {
+  const local = new LocalWhisper();
+  await start(local);
+  expect(mocks.whisperInit).toHaveBeenCalledOnce();
+  feed();
+  await local.transcribe();
+
+  await start(local);
+  feed();
+  await local.transcribe();
+
+  expect(mocks.whisperInit).toHaveBeenCalledOnce();
+  expect(mocks.transcribe).toHaveBeenCalledTimes(2);
+  expect(mocks.release).not.toHaveBeenCalled();
+  await local.dispose();
+  expect(mocks.release).toHaveBeenCalledOnce();
 });
 it("rejects incomplete downloads before accessing the microphone and removes the partial file", async () => {
   mocks.info.mockResolvedValue({ exists: false });
@@ -132,9 +151,10 @@ it("releases Whisper on failure and retains audio for a local retry", async () =
     promise: Promise.reject(new Error("Whisper failed")),
   });
   await expect(local.transcribe()).rejects.toThrow("Whisper failed");
-  expect(mocks.release).toHaveBeenCalledOnce();
+  expect(mocks.release).not.toHaveBeenCalled();
   expect(await local.transcribe()).toBe("Nota local");
   await local.dispose();
+  expect(mocks.release).toHaveBeenCalledOnce();
 });
 it("does not start recording if the screen closes during model preparation", async () => {
   const local = new LocalWhisper();
@@ -175,18 +195,19 @@ it("installs a complete model through a temporary file before opening the microp
 });
 it("releases a context that finishes initializing after the screen has closed", async () => {
   const local = new LocalWhisper();
-  await start(local);
-  feed();
   let finish!: (value: unknown) => void;
   mocks.whisperInit.mockReturnValue(
     new Promise((resolve) => {
       finish = resolve;
     }),
   );
+  await start(local);
+  feed();
   const transcribing = local.transcribe();
   await vi.waitFor(() => expect(mocks.whisperInit).toHaveBeenCalledOnce());
-  await local.dispose();
+  const disposing = local.dispose();
   finish({ transcribeData: mocks.transcribe, release: mocks.release });
+  await disposing;
   await expect(transcribing).rejects.toThrow("cancelada");
   expect(mocks.transcribe).not.toHaveBeenCalled();
   expect(mocks.release).toHaveBeenCalledOnce();
