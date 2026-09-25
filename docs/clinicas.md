@@ -14,6 +14,8 @@ La versión 1.1 incorpora cuentas por clínica, invitaciones para médicos, paci
 
 ADMIN abre «Administrar clínica → Registrar paciente». Introduce nombre, CC sin puntos, nacimiento, sexo, servicio y cama. Revisa la identidad antes de confirmar. La combinación clínica/CC es única: una clínica no puede consultar el registro de otra, aunque ambas hayan ingresado a la misma persona. Esta validación evita duplicados; no verifica la cédula contra la Registraduría.
 
+El alta hospitalaria cierra el episodio y la asignación de cama con una misma fecha y hora, y revoca la etiqueta NFC del ingreso. No elimina al paciente ni sus evoluciones, documentos, resultados o pendientes. Si regresa, ADMIN busca la cédula y crea un nuevo ingreso indicando únicamente el nuevo servicio y cama; la identidad y la historia continúan en el mismo registro. Solo puede existir un ingreso activo por paciente.
+
 Después puede escribir una etiqueta **NDEF vacía** desde el teléfono. Se guarda un token aleatorio, nunca la cédula ni la historia. La app rechaza etiquetas que ya contienen otros datos. Primero escribe, después solicita retirar y volver a acercar la etiqueta; solo al verificar el token se activa el vínculo en el servidor. La etiqueta queda ligada al paciente, no al correo del teléfono. La lectura sigue requiriendo iniciar sesión, tener acceso al episodio y confirmar la identidad.
 
 Desde la ficha del paciente, ADMIN puede volver a «Administrar etiqueta NFC». Activar una sustituta revoca las anteriores. Revocar una etiqueta invalida también los contextos NFC abiertos. Una etiqueta NDEF puede copiarse: su posesión nunca concede acceso por sí sola.

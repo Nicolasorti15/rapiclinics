@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from app.create_clinic import create_clinic
-from app.models import Patient, Tag
+from app.models import Assignment, Encounter, Patient, Tag
 from app.providers import identity_match
 from app.security import digest
 
@@ -141,6 +141,69 @@ def test_revoked_tag_invalidates_existing_scan(client, clinics):
         ).status_code
         == 409
     )
+
+
+def test_discharge_preserves_patient_and_allows_readmission_by_identifier(client, db, clinics):
+    login(client, "admin@clinica-a.test")
+    patient = client.post("/admin/patients", json=patient_data()).json()
+    original_encounter = patient["encounter_id"]
+    token = client.post(f"/admin/patients/{patient['id']}/nfc/prepare").json()["token"]
+    client.post(f"/admin/patients/{patient['id']}/nfc/activate", json={"token": token})
+
+    discharged = client.post(f"/admin/patients/{patient['id']}/discharge")
+    assert discharged.status_code == 200
+    assert discharged.json()["status"] == "DISCHARGED"
+    assert discharged.json()["discharged_at"]
+    assert client.get("/patients").json() == []
+    assert db.get(Patient, patient["id"]) is not None
+    old_encounter = db.get(Encounter, original_encounter)
+    assert old_encounter.status == "DISCHARGED"
+    assert old_encounter.discharged_at == discharged.json()["discharged_at"]
+    assignment = db.scalar(select(Assignment).where(Assignment.encounter_id == original_encounter))
+    assert assignment.status == "ENDED"
+    assert assignment.ended_at == discharged.json()["discharged_at"]
+    assert db.scalar(select(Tag).where(Tag.token_hash == digest(token))).status == "REVOKED"
+
+    lookup = client.get("/admin/patients/by-identifier/123456789")
+    assert lookup.status_code == 200
+    assert lookup.json()["patient"]["id"] == patient["id"]
+    assert lookup.json()["active"] is False
+    assert lookup.json()["last_discharge_at"] == discharged.json()["discharged_at"]
+
+    readmitted = client.post(
+        f"/admin/patients/{patient['id']}/admit",
+        json={"service": "Medicina interna", "bed_code": "205"},
+    )
+    assert readmitted.status_code == 201
+    assert readmitted.json()["id"] == patient["id"]
+    assert readmitted.json()["encounter_id"] != original_encounter
+    assert readmitted.json()["bed"] == "205"
+    assert len(db.scalars(select(Patient).where(Patient.id == patient["id"])).all()) == 1
+    assert (
+        client.post(
+            f"/admin/patients/{patient['id']}/admit",
+            json={"service": "Medicina interna", "bed_code": "206"},
+        ).status_code
+        == 409
+    )
+
+
+def test_only_admin_can_lookup_readmit_or_discharge_patients(client, clinics):
+    admin_session = login(client, "admin@clinica-a.test")
+    patient = client.post("/admin/patients", json=patient_data()).json()
+    _, physician_session = doctor(client)
+    client.headers["Authorization"] = "Bearer " + physician_session["access_token"]
+    assert client.get("/admin/patients/by-identifier/123456789").status_code == 403
+    assert client.post(f"/admin/patients/{patient['id']}/discharge").status_code == 403
+    assert (
+        client.post(
+            f"/admin/patients/{patient['id']}/admit",
+            json={"service": "Medicina interna", "bed_code": "205"},
+        ).status_code
+        == 403
+    )
+    client.headers["Authorization"] = "Bearer " + admin_session["access_token"]
+    assert client.get("/patients").status_code == 200
 
 
 def test_deactivated_doctor_loses_existing_session(client, clinics):

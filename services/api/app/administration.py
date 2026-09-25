@@ -68,6 +68,11 @@ class NewPatient(StrictModel):
         return value
 
 
+class NewAdmission(StrictModel):
+    service: str = Field(min_length=2, max_length=100)
+    bed_code: str = Field(min_length=1, max_length=30)
+
+
 def admin(user=Depends(get_user)):
     require_role(user, ADMIN_ROLES)
     return user
@@ -78,6 +83,39 @@ def owned_patient(db, user, patient_id):
     if not patient or patient.clinic_id != user.clinic_id:
         raise HTTPException(404, "Paciente no encontrado.")
     return patient
+
+
+def available_bed(db, user, service, bed_code):
+    bed = db.scalar(select(Bed).where(Bed.clinic_id == user.clinic_id, Bed.code == bed_code))
+    if bed and (
+        bed.unit != service
+        or db.scalar(select(Assignment.id).where(Assignment.bed_id == bed.id, Assignment.status == "ACTIVE"))
+    ):
+        raise HTTPException(409, "La cama está ocupada o pertenece a otro servicio.")
+    if not bed:
+        bed = Bed(clinic_id=user.clinic_id, code=bed_code, unit=service)
+        db.add(bed)
+        db.flush()
+    return bed
+
+
+def create_admission(db, user, patient, body):
+    active = db.scalar(
+        select(Encounter.id).where(
+            Encounter.patient_id == patient.id,
+            Encounter.clinic_id == user.clinic_id,
+            Encounter.status == "ACTIVE",
+        )
+    )
+    if active:
+        raise HTTPException(409, "El paciente ya tiene un ingreso activo.")
+    bed = available_bed(db, user, body.service, body.bed_code)
+    encounter = Encounter(clinic_id=user.clinic_id, patient_id=patient.id, service=body.service)
+    db.add(encounter)
+    db.flush()
+    db.add(Assignment(bed_id=bed.id, encounter_id=encounter.id))
+    db.flush()
+    return encounter
 
 
 @router.get("/admin/users")
@@ -183,17 +221,6 @@ def create_patient(body: NewPatient, user=Depends(admin), db: Session = Depends(
     from .main import patient_context
 
     try:
-        bed = db.scalar(select(Bed).where(Bed.clinic_id == user.clinic_id, Bed.code == body.bed_code))
-        if bed and (
-            bed.unit != body.service
-            or db.scalar(
-                select(Assignment.id).where(Assignment.bed_id == bed.id, Assignment.status == "ACTIVE")
-            )
-        ):
-            raise HTTPException(409, "La cama está ocupada o pertenece a otro servicio.")
-        if not bed:
-            bed = Bed(clinic_id=user.clinic_id, code=body.bed_code, unit=body.service)
-            db.add(bed)
         patient = Patient(
             clinic_id=user.clinic_id,
             document_type="CC",
@@ -206,11 +233,7 @@ def create_patient(body: NewPatient, user=Depends(admin), db: Session = Depends(
         )
         db.add(patient)
         db.flush()
-        encounter = Encounter(clinic_id=user.clinic_id, patient_id=patient.id, service=body.service)
-        db.add(encounter)
-        db.flush()
-        db.add(Assignment(bed_id=bed.id, encounter_id=encounter.id))
-        db.flush()
+        create_admission(db, user, patient, body)
         audit(db, user, "patient_registered", patient.id)
         result = patient_context(db, user, patient.id)
         db.commit()
@@ -218,6 +241,107 @@ def create_patient(body: NewPatient, user=Depends(admin), db: Session = Depends(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "La cédula ya está registrada o la cama acaba de ser asignada.") from exc
+
+
+@router.get("/admin/patients/by-identifier/{identifier}")
+def patient_by_identifier(identifier: str, user=Depends(admin), db: Session = Depends(db_session)):
+    if not re.fullmatch(r"[0-9]{3,15}", identifier):
+        raise HTTPException(422, "Introduce una cédula válida, sin puntos.")
+    patient = db.scalar(
+        select(Patient).where(
+            Patient.clinic_id == user.clinic_id,
+            Patient.document_type == "CC",
+            Patient.identifier == identifier,
+        )
+    )
+    if not patient:
+        raise HTTPException(404, "La cédula no está registrada en esta clínica.")
+    encounters = db.scalars(
+        select(Encounter)
+        .where(Encounter.clinic_id == user.clinic_id, Encounter.patient_id == patient.id)
+        .order_by(Encounter.admission_at.desc())
+    ).all()
+    active = next((encounter for encounter in encounters if encounter.status == "ACTIVE"), None)
+    current = None
+    if active:
+        from .main import patient_context
+
+        current = patient_context(db, user, patient.id)
+    audit(db, user, "patient_lookup", patient.id)
+    db.commit()
+    return {
+        "patient": {
+            "id": patient.id,
+            "name": patient.name,
+            "identifier": patient.identifier,
+            "birth_date": patient.birth_date,
+            "sex": patient.sex,
+            "summary": patient.summary,
+            "allergies": patient.allergies,
+        },
+        "active": active is not None,
+        "current": current,
+        "last_discharge_at": next(
+            (encounter.discharged_at for encounter in encounters if encounter.discharged_at), None
+        ),
+    }
+
+
+@router.post("/admin/patients/{patient_id}/admit", status_code=201)
+def admit_patient(
+    patient_id: str,
+    body: NewAdmission,
+    user=Depends(admin),
+    db: Session = Depends(db_session),
+):
+    from .main import patient_context
+
+    patient = owned_patient(db, user, patient_id)
+    try:
+        encounter = create_admission(db, user, patient, body)
+        audit(db, user, "patient_readmitted", patient.id, encounter_id=encounter.id)
+        result = patient_context(db, user, patient.id)
+        db.commit()
+        return result
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "El paciente ya fue ingresado o la cama acaba de ocuparse.") from exc
+
+
+@router.post("/admin/patients/{patient_id}/discharge")
+def discharge_patient(patient_id: str, user=Depends(admin), db: Session = Depends(db_session)):
+    patient = owned_patient(db, user, patient_id)
+    encounter = db.scalar(
+        select(Encounter).where(
+            Encounter.patient_id == patient.id,
+            Encounter.clinic_id == user.clinic_id,
+            Encounter.status == "ACTIVE",
+        )
+    )
+    if not encounter:
+        raise HTTPException(409, "El paciente no tiene un ingreso activo.")
+    discharged_at = now()
+    changed = db.execute(
+        update(Encounter)
+        .where(Encounter.id == encounter.id, Encounter.status == "ACTIVE")
+        .values(status="DISCHARGED", discharged_at=discharged_at)
+    )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "El ingreso cambió. Actualiza la lista e inténtalo nuevamente.")
+    db.execute(
+        update(Assignment)
+        .where(Assignment.encounter_id == encounter.id, Assignment.status == "ACTIVE")
+        .values(status="ENDED", ended_at=discharged_at)
+    )
+    db.execute(
+        update(Tag)
+        .where(Tag.patient_id == patient.id, Tag.status.in_(["ACTIVE", "PENDING"]))
+        .values(status="REVOKED")
+    )
+    audit(db, user, "patient_discharged", patient.id, encounter_id=encounter.id)
+    db.commit()
+    return {"patient_id": patient.id, "status": "DISCHARGED", "discharged_at": discharged_at}
 
 
 @router.post("/admin/patients/{patient_id}/nfc/prepare", status_code=201)

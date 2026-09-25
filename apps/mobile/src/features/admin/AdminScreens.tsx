@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { api } from "../../api/client";
+import { api, ApiError } from "../../api/client";
 import {
   Badge,
   Body,
@@ -17,7 +17,7 @@ import {
   Title,
   s,
 } from "../../components/ui";
-import type { Patient, Routes, User } from "../../types";
+import type { Patient, PatientLookup, Routes, User } from "../../types";
 import { useAction, useAuth, useResource } from "../core";
 import { nfcAvailable, readBedToken } from "../nfc/reader";
 import { writePatientToken } from "../nfc/writer";
@@ -167,11 +167,39 @@ export function RegisterPatientScreen({
     summary: "",
     allergies: "Sin información registrada",
   });
+  const [lookupComplete, setLookupComplete] = useState(false);
+  const [existing, setExisting] = useState<PatientLookup | null>(null);
   const [review, setReview] = useState(false);
   const set = (key: keyof typeof form, value: string) => {
     setForm({ ...form, [key]: value });
     setReview(false);
   };
+  const setIdentifier = (value: string) => {
+    setForm({ ...form, identifier: value.replace(/\D/g, "") });
+    setExisting(null);
+    setLookupComplete(false);
+    setReview(false);
+  };
+  const lookup = () =>
+    action.run(async () => {
+      if (!/^\d{3,15}$/.test(form.identifier))
+        throw new Error("Introduce una cédula válida, sin puntos.");
+      try {
+        const result = await api<PatientLookup>(
+          `/admin/patients/by-identifier/${encodeURIComponent(form.identifier)}`,
+        );
+        setExisting(result);
+        setLookupComplete(true);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          setExisting(null);
+          setLookupComplete(true);
+          action.setError("");
+          return;
+        }
+        throw error;
+      }
+    });
   if (!isAdmin(session?.user.role))
     return (
       <Page>
@@ -183,54 +211,119 @@ export function RegisterPatientScreen({
       <Label>INGRESO DE PACIENTE</Label>
       <Title>Identificación y ubicación</Title>
       <Body muted>
-        Verifica la cédula con el documento del paciente antes de guardar.
+        Busca primero la cédula. Si el paciente ya estuvo en la clínica, solo
+        tendrás que asignar el nuevo servicio y la cama.
       </Body>
       <Card>
         <Field
-          label="Nombre completo"
-          value={form.name}
-          onChangeText={(v) => set("name", v)}
-        />
-        <Field
           label="Cédula de ciudadanía · sin puntos"
           value={form.identifier}
-          onChangeText={(v) => set("identifier", v)}
+          onChangeText={setIdentifier}
           keyboardType="number-pad"
           maxLength={15}
         />
-        <BirthDatePicker
-          value={form.birth_date}
-          onChange={(value) => set("birth_date", value)}
-        />
-        <Label>SEXO REGISTRADO</Label>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          {["F", "M", "X", "ND"].map((value) => (
-            <Button
-              key={value}
-              title={value === "ND" ? "Sin dato" : value}
-              secondary={form.sex !== value}
-              onPress={() => set("sex", value)}
-            />
-          ))}
-        </View>
-        <Field
-          label="Servicio"
-          value={form.service}
-          onChangeText={(v) => set("service", v)}
-        />
-        <Field
-          label="Cama o ubicación"
-          value={form.bed_code}
-          onChangeText={(v) => set("bed_code", v)}
-        />
-        <Field
-          label="Alergias documentadas"
-          value={form.allergies}
-          onChangeText={(v) => set("allergies", v)}
+        <Button
+          title="Buscar cédula"
+          icon="search"
+          loading={action.busy}
+          onPress={lookup}
         />
       </Card>
       {action.error && <Notice error text={action.error} />}
-      {review ? (
+      {existing?.active && existing.current && (
+        <Card>
+          <Badge>INGRESO ACTIVO</Badge>
+          <PatientIdentity patient={existing.current} />
+          <Notice text="Este paciente ya está hospitalizado. No se creó otro ingreso ni se modificó su historia." />
+        </Card>
+      )}
+      {existing && !existing.active && (
+        <Card>
+          <Badge>PACIENTE ENCONTRADO</Badge>
+          <Text style={s.subtitle}>{existing.patient.name}</Text>
+          <Body>
+            CC {existing.patient.identifier} ·{" "}
+            {formatBirthDate(existing.patient.birth_date)}
+          </Body>
+          {existing.last_discharge_at && (
+            <Body muted>
+              Última alta:{" "}
+              {new Date(existing.last_discharge_at).toLocaleString("es-CO")}
+            </Body>
+          )}
+          <Notice text="Se conservarán sus evoluciones, documentos, resultados y antecedentes. Este paso crea un nuevo ingreso." />
+          <Field
+            label="Nuevo servicio"
+            value={form.service}
+            onChangeText={(v) => set("service", v)}
+          />
+          <Field
+            label="Nueva cama o ubicación"
+            value={form.bed_code}
+            onChangeText={(v) => set("bed_code", v)}
+          />
+          <Button
+            title="Confirmar nuevo ingreso"
+            icon="log-in"
+            loading={action.busy}
+            onPress={() =>
+              action.run(async () => {
+                if (!form.service.trim() || !form.bed_code.trim())
+                  throw new Error("Completa el servicio y la cama.");
+                const patient = await api<Patient>(
+                  `/admin/patients/${existing.patient.id}/admit`,
+                  "POST",
+                  { service: form.service, bed_code: form.bed_code },
+                );
+                navigation.replace("LinkNfc", { patient });
+              })
+            }
+          />
+        </Card>
+      )}
+      {lookupComplete && !existing && (
+        <Notice text="La cédula no está registrada en esta clínica. Completa los datos para crear el paciente y su primer ingreso." />
+      )}
+      {lookupComplete && !existing && (
+        <Card>
+          <Field
+            label="Nombre completo"
+            value={form.name}
+            onChangeText={(v) => set("name", v)}
+          />
+          <BirthDatePicker
+            value={form.birth_date}
+            onChange={(value) => set("birth_date", value)}
+          />
+          <Label>SEXO REGISTRADO</Label>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {["F", "M", "X", "ND"].map((value) => (
+              <Button
+                key={value}
+                title={value === "ND" ? "Sin dato" : value}
+                secondary={form.sex !== value}
+                onPress={() => set("sex", value)}
+              />
+            ))}
+          </View>
+          <Field
+            label="Servicio"
+            value={form.service}
+            onChangeText={(v) => set("service", v)}
+          />
+          <Field
+            label="Cama o ubicación"
+            value={form.bed_code}
+            onChangeText={(v) => set("bed_code", v)}
+          />
+          <Field
+            label="Alergias documentadas"
+            value={form.allergies}
+            onChangeText={(v) => set("allergies", v)}
+          />
+        </Card>
+      )}
+      {lookupComplete && !existing && review ? (
         <Card>
           <Text style={s.subtitle}>{form.name}</Text>
           <Body>
@@ -259,7 +352,7 @@ export function RegisterPatientScreen({
             onPress={() => setReview(false)}
           />
         </Card>
-      ) : (
+      ) : lookupComplete && !existing ? (
         <Button
           title="Revisar datos"
           onPress={() =>
@@ -277,7 +370,7 @@ export function RegisterPatientScreen({
             })
           }
         />
-      )}
+      ) : null}
     </Page>
   );
 }

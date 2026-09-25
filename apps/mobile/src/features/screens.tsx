@@ -554,6 +554,24 @@ export function ConfirmScreen({ route, navigation }: Props<"Confirm">) {
 export function PatientScreen({ route, navigation }: Props<"Patient">) {
   const { session } = useAuth();
   const { patient } = route.params;
+  const action = useAction();
+  const [confirmDischarge, setConfirmDischarge] = useState(false);
+  const [dischargedAt, setDischargedAt] = useState<string | null>(null);
+  if (dischargedAt)
+    return (
+      <Page>
+        <Badge>ALTA HOSPITALARIA REGISTRADA</Badge>
+        <Title>{patient.name}</Title>
+        <Notice
+          text={`Salió del hospital el ${new Date(dischargedAt).toLocaleString("es-CO")}. Su historia clínica permanece guardada para futuros ingresos.`}
+        />
+        <Button
+          title="Volver a pacientes activos"
+          icon="users"
+          onPress={() => navigation.navigate("Patients")}
+        />
+      </Page>
+    );
   return (
     <Page patient={patient}>
       <View style={{ gap: 8 }}>
@@ -568,12 +586,53 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
         />
       )}
       {isAdmin(session?.user.role) && (
-        <Button
-          title="Administrar etiqueta NFC"
-          secondary
-          icon="radio"
-          onPress={() => navigation.navigate("LinkNfc", { patient })}
-        />
+        <>
+          <Button
+            title="Administrar etiqueta NFC"
+            secondary
+            icon="radio"
+            onPress={() => navigation.navigate("LinkNfc", { patient })}
+          />
+          {confirmDischarge ? (
+            <Card>
+              <Badge>CONFIRMAR ALTA HOSPITALARIA</Badge>
+              <Body>
+                Se cerrará el ingreso actual de {patient.name} y se registrará
+                la fecha y hora del alta.
+              </Body>
+              <Notice text="La historia, documentos, resultados y evoluciones permanecerán guardados. La cama quedará disponible y la etiqueta NFC del paciente será revocada." />
+              <Button
+                title="Confirmar salida del hospital"
+                danger
+                loading={action.busy}
+                onPress={() =>
+                  action.run(async () => {
+                    const result = await api<{ discharged_at: string }>(
+                      `/admin/patients/${patient.id}/discharge`,
+                      "POST",
+                    );
+                    setConfirmDischarge(false);
+                    setDischargedAt(result.discharged_at);
+                  })
+                }
+              />
+              <Button
+                title="Cancelar"
+                secondary
+                disabled={action.busy}
+                onPress={() => setConfirmDischarge(false)}
+              />
+            </Card>
+          ) : (
+            <Button
+              title="Dar alta hospitalaria"
+              danger
+              icon="log-out"
+              onPress={() => setConfirmDischarge(true)}
+            />
+          )}
+          {Boolean(action.error) && <Notice error text={action.error} />}
+        </>
       )}
       <Card>
         <Label>RESUMEN DEL PACIENTE</Label>

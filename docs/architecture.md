@@ -16,7 +16,7 @@ NFC resuelve etiqueta → asignación → episodio → paciente. La confirmació
 
 Un PDF conserva un paciente candidato mientras está en revisión. Su asociación definitiva permanece nula hasta validar. Las discrepancias bloquean la validación, también con confirmación manual. SHA-256 se calcula sobre el original y se verifica al descargar. La extracción es una entidad separada.
 
-Restricciones SQL: una asignación activa por cama y episodio; relación consistente paciente/episodio; una visita confirmada exige revisor y fecha; un documento validado exige asociación y validación humana, sin discrepancia.
+Restricciones SQL: una asignación activa por cama y episodio; un solo episodio activo por paciente; relación consistente paciente/episodio; una visita confirmada exige revisor y fecha; un documento validado exige asociación y validación humana, sin discrepancia. El alta marca el episodio como `DISCHARGED`, guarda `discharged_at` y conserva todas las entidades ligadas al paciente para un reingreso posterior por cédula.
 
 ## Decisiones y límites
 

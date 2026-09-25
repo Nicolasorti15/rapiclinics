@@ -109,7 +109,17 @@ class Encounter(Base):
     service = Column(String, nullable=False)
     status = Column(String, default="ACTIVE", nullable=False)
     admission_at = Column(String, default=now, nullable=False)
-    __table_args__ = (UniqueConstraint("id", "patient_id", name="encounter_patient_pair"),)
+    discharged_at = Column(String)
+    __table_args__ = (
+        UniqueConstraint("id", "patient_id", name="encounter_patient_pair"),
+        Index(
+            "one_active_patient_encounter",
+            "patient_id",
+            unique=True,
+            sqlite_where=text("status = 'ACTIVE'"),
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+    )
 
 
 class Bed(Base):

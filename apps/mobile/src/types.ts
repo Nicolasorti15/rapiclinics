@@ -11,6 +11,21 @@ export type Patient = {
   bed: string;
   admission_at: string;
 };
+export type PatientLookup = {
+  patient: Pick<
+    Patient,
+    | "id"
+    | "name"
+    | "identifier"
+    | "birth_date"
+    | "sex"
+    | "summary"
+    | "allergies"
+  >;
+  active: boolean;
+  current: Patient | null;
+  last_discharge_at: string | null;
+};
 export type User = {
   id: string;
   name: string;
