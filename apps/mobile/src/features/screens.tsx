@@ -558,6 +558,12 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
   const action = useAction();
   const [confirmDischarge, setConfirmDischarge] = useState(false);
   const [dischargedAt, setDischargedAt] = useState<string | null>(null);
+  const clinicalRole = ["STUDENT", "INTERN", "RESIDENT", "PHYSICIAN", "NURSE"].includes(
+    session?.user.role || "",
+  );
+  const canWriteEvolution =
+    session?.user.role === "SYSTEM_ADMIN" ||
+    (clinicalRole && session?.user.unit === patient.service);
   if (dischargedAt)
     return (
       <Page>
@@ -579,19 +585,15 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
         <Badge>IDENTIDAD CONFIRMADA</Badge>
         <Title>Paciente actual</Title>
       </View>
-      {[
-        "STUDENT",
-        "INTERN",
-        "RESIDENT",
-        "PHYSICIAN",
-        "NURSE",
-        "SYSTEM_ADMIN",
-      ].includes(session?.user.role || "") && (
+      {canWriteEvolution && (
         <Button
           title="Nueva evolución"
           icon="edit-3"
           onPress={() => navigation.navigate("Visit", route.params)}
         />
+      )}
+      {clinicalRole && !canWriteEvolution && (
+        <Notice text={`Puedes consultar esta historia. Para registrar una evolución debes pertenecer al servicio ${patient.service}.`} />
       )}
       {isAdmin(session?.user.role) && (
         <>
