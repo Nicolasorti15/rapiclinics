@@ -422,6 +422,10 @@ def draft(visit_id: str, body: Draft, user=Depends(get_user), db: Session = Depe
         raise HTTPException(409, "Genera la propuesta antes de guardar su revisión.")
     if any(len(item) > 1000 for item in body.tasks):
         raise HTTPException(422, "Un pendiente es demasiado largo.")
+    if body.original_transcript:
+        if visit.original_transcript and visit.original_transcript != body.original_transcript:
+            raise HTTPException(409, "La transcripción original ya fue registrada y no puede reemplazarse.")
+        visit.original_transcript = body.original_transcript
     visit.transcript = body.transcript
     if body.evolution is not None:
         visit.note = {**visit.note, "draft_evolution": body.evolution, "draft_tasks": body.tasks}

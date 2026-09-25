@@ -175,6 +175,24 @@ def test_audio_transcription_preserves_original(client, context, monkeypatch):
     assert client.get(f"/visits/{visit['id']}").json()["original_transcript"] == result["transcript"]
 
 
+def test_local_transcription_preserves_original_and_doctor_correction(client, context):
+    visit = client.post("/visits", json={"scan_id": context["scan_id"]}).json()
+    original = "Paciente niega dolor de pecho."
+    corrected = "Paciente niega dolor torácico."
+    saved = client.patch(
+        f"/visits/{visit['id']}/draft",
+        json={"original_transcript": original, "transcript": corrected},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["original_transcript"] == original
+    assert saved.json()["transcript"] == corrected
+    replacement = client.patch(
+        f"/visits/{visit['id']}/draft",
+        json={"original_transcript": "Texto diferente", "transcript": corrected},
+    )
+    assert replacement.status_code == 409
+
+
 def test_document_original_hash_duplicate_validation_ehr(client, context, db):
     content = fixture_pdf("SIM-7314", "Paciente Ficticio")
     result = upload(client, context, content=content, name="../../evil.pdf")

@@ -279,6 +279,9 @@ export function VisitScreen({
     const revision = draftRevision.current;
     const snapshot = {
       transcript,
+      ...(originalTranscript
+        ? { original_transcript: originalTranscript }
+        : {}),
       ...(step === "review"
         ? {
             evolution,
@@ -316,7 +319,7 @@ export function VisitScreen({
       () => undefined,
     );
     return result;
-  }, [ensureVisit, evolution, step, tasks, transcript]);
+  }, [ensureVisit, evolution, originalTranscript, step, tasks, transcript]);
   useEffect(() => {
     saveLatest.current = saveDraft;
   }, [saveDraft]);

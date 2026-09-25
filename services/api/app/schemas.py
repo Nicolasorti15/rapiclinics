@@ -30,6 +30,7 @@ class CreateVisit(StrictModel):
 
 class Draft(StrictModel):
     transcript: str = Field(min_length=1, max_length=20000)
+    original_transcript: str | None = Field(default=None, min_length=1, max_length=20000)
     evolution: str | None = Field(default=None, max_length=20000)
     tasks: list[str] = Field(default_factory=list, max_length=30)
 
