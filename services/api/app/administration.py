@@ -3,6 +3,7 @@
 import re
 import secrets
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field, field_validator
@@ -36,9 +37,10 @@ def normalize_email(value):
     return value
 
 
-class InviteDoctor(StrictModel):
+class InviteStaff(StrictModel):
     email: str
     unit: str = Field(min_length=2, max_length=100)
+    role: Literal["PHYSICIAN", "NURSE", "RECORDS_ADMIN"] = "PHYSICIAN"
     _email = field_validator("email")(normalize_email)
 
 
@@ -127,7 +129,7 @@ def users(user=Depends(admin), db: Session = Depends(db_session)):
 
 
 @router.post("/admin/invitations", status_code=201)
-def invite(body: InviteDoctor, user=Depends(admin), db: Session = Depends(db_session)):
+def invite(body: InviteStaff, user=Depends(admin), db: Session = Depends(db_session)):
     clinic = db.get(Clinic, user.clinic_id)
     if clinic.email_domain and body.email.split("@")[-1] != clinic.email_domain:
         raise HTTPException(422, "Utiliza el correo laboral del dominio de la clínica.")
@@ -144,14 +146,20 @@ def invite(body: InviteDoctor, user=Depends(admin), db: Session = Depends(db_ses
         clinic_id=user.clinic_id,
         email=body.email,
         unit=body.unit,
+        role=body.role,
         token_hash=digest(token),
         expires_at=future(60 * 24),
         created_by=user.id,
     )
     db.add(invitation)
-    audit(db, user, "doctor_invited")
+    audit(db, user, "staff_invited", role=body.role)
     db.commit()
-    return {"token": token, "email": body.email, "expires_at": invitation.expires_at}
+    return {
+        "token": token,
+        "email": body.email,
+        "role": body.role,
+        "expires_at": invitation.expires_at,
+    }
 
 
 @router.post("/auth/register", status_code=201)
@@ -187,13 +195,13 @@ def register(body: RegisterDoctor, db: Session = Depends(db_session)):
             clinic_id=clinic.id,
             email=body.email,
             name=body.name,
-            role="PHYSICIAN",
+            role=invitation.role,
             unit=invitation.unit,
             password_hash=hasher.hash(body.password),
         )
         db.add(user)
         db.flush()
-        audit(db, user, "doctor_registered")
+        audit(db, user, "staff_registered", role=user.role)
         result = issue_session(db, user)
         db.commit()
         return result
@@ -207,8 +215,8 @@ def deactivate(user_id: str, user=Depends(admin), db: Session = Depends(db_sessi
     target = db.get(User, user_id)
     if not target or target.clinic_id != user.clinic_id:
         raise HTTPException(404, "Usuario no encontrado.")
-    if target.role != "PHYSICIAN":
-        raise HTTPException(409, "Esta opción solo desactiva médicos.")
+    if target.role in ADMIN_ROLES:
+        raise HTTPException(409, "No puedes desactivar una cuenta administradora desde esta opción.")
     target.active = False
     db.execute(update(AuthSession).where(AuthSession.user_id == target.id).values(revoked=True))
     audit(db, user, "user_deactivated", target.id)

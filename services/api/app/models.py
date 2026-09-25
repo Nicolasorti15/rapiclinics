@@ -32,6 +32,7 @@ class Invitation(Base):
     clinic_id = Column(ForeignKey("clinics.id"), nullable=False)
     email = Column(String, nullable=False)
     unit = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="PHYSICIAN")
     token_hash = Column(String, unique=True, nullable=False)
     expires_at = Column(String, nullable=False)
     used = Column(Boolean, default=False, nullable=False)

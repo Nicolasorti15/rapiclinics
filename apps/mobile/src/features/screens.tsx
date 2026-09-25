@@ -377,9 +377,10 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
     <Page footer={<BottomNav navigation={navigation} active="Patients" />}>
       <View style={{ gap: 8 }}>
         <Label>{session?.user.clinic_name}</Label>
-        <Title>Tus pacientes</Title>
+        <Title>Pacientes de la clínica</Title>
         <Body muted>
-          Busca por nombre o cédula y confirma la identidad antes de continuar.
+          Médicos, enfermería y administrativos pueden buscar por nombre,
+          cédula o habitación y confirmar la identidad antes de continuar.
         </Body>
       </View>
       {isAdmin(session?.user.role) && (
@@ -390,7 +391,7 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
         />
       )}
       <Field
-        label="Buscar en tu servicio"
+        label="Buscar en la clínica"
         placeholder="Nombre, cama o cédula"
         value={query}
         onChangeText={setQuery}
@@ -424,7 +425,7 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
       ) : (
         <Empty
           title="Sin resultados"
-          text="Prueba con otro nombre o número de cama."
+          text="Prueba con otro nombre, cédula o número de habitación."
         />
       )}
     </Page>
@@ -486,7 +487,7 @@ export function ScanScreen({ navigation }: Props<"Scan">) {
       <Card>
         <Text style={s.subtitle}>Identificación por cédula</Text>
         <Body muted>
-          También puedes buscar al paciente en tu servicio y confirmar su
+          También puedes buscar al paciente en toda la clínica y confirmar su
           documento de identidad.
         </Body>
         <Button
@@ -578,7 +579,14 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
         <Badge>IDENTIDAD CONFIRMADA</Badge>
         <Title>Paciente actual</Title>
       </View>
-      {session?.user.role !== "ADMIN" && (
+      {[
+        "STUDENT",
+        "INTERN",
+        "RESIDENT",
+        "PHYSICIAN",
+        "NURSE",
+        "SYSTEM_ADMIN",
+      ].includes(session?.user.role || "") && (
         <Button
           title="Nueva evolución"
           icon="edit-3"

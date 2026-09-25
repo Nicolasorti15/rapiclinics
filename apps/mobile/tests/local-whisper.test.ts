@@ -186,11 +186,24 @@ it("installs a complete model through a temporary file before opening the microp
     "file:///private/whisper-base-multilingual.bin",
     { idempotent: true },
   );
-  expect(mocks.removeFile).toHaveBeenCalledWith(
-    "file:///private/whisper-small-q5-clinical.bin",
-    { idempotent: true },
-  );
   expect(mocks.start).toHaveBeenCalledOnce();
+  await local.dispose();
+});
+it("can retry the same audio with the larger local model and a wider beam", async () => {
+  const local = new LocalWhisper();
+  await start(local);
+  feed();
+  mocks.info.mockResolvedValueOnce({ exists: true, size: 190085487 });
+
+  expect(await local.transcribe("precise", vi.fn())).toBe("Nota local");
+
+  expect(mocks.whisperInit).toHaveBeenLastCalledWith({
+    filePath: "file:///private/whisper-small-q5-clinical.bin",
+    useGpu: false,
+  });
+  expect(mocks.transcribe.mock.calls[0][1]).toEqual(
+    expect.objectContaining({ beamSize: 4, bestOf: 4 }),
+  );
   await local.dispose();
 });
 it("releases a context that finishes initializing after the screen has closed", async () => {

@@ -55,6 +55,7 @@ export function VisitScreen({
   const [originalTranscript, setOriginalTranscript] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [audioReady, setAudioReady] = useState(false);
+  const [precisionRetryAvailable, setPrecisionRetryAvailable] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const serverRecording = useAudioRecorderState(recorder);
   const [localMode, setLocalMode] = useState(localWhisperAvailable);
@@ -217,6 +218,7 @@ export function VisitScreen({
       await ensureVisit();
       if (localMode) {
         setAudioReady(false);
+        setPrecisionRetryAvailable(false);
         setLocalDuration(0);
         setInterrupted(false);
         local.current ??= new LocalWhisper();
@@ -250,16 +252,21 @@ export function VisitScreen({
       setAudioReady(false);
       setInterrupted(false);
     });
-  const transcribe = () =>
+  const transcribe = (quality: "fast" | "precise" = "fast") =>
     action.run(async () => {
       if (localMode) {
         if (!local.current) throw new Error("Graba un audio primero.");
-        setLocalStatus("Transcribiendo en el teléfono…");
+        setLocalStatus(
+          quality === "precise"
+            ? "Preparando una transcripción más precisa…"
+            : "Transcribiendo en el teléfono…",
+        );
         try {
-          const text = await local.current.transcribe();
+          const text = await local.current.transcribe(quality, setLocalStatus);
           if (!mounted.current) return;
           setTranscript(text);
-          setOriginalTranscript(text);
+          setOriginalTranscript((current) => current || text);
+          setPrecisionRetryAvailable(quality === "fast");
           markDirty();
           warmClinicalAI();
         } finally {
@@ -535,14 +542,29 @@ export function VisitScreen({
                 }
                 secondary
                 loading={action.busy}
-                onPress={transcribe}
+                onPress={() => transcribe("fast")}
               />
             )}
           </Card>
+          {localMode && precisionRetryAvailable && transcript.trim() && (
+            <Card>
+              <Text style={s.subtitle}>¿La transcripción tiene errores?</Text>
+              <Body muted>
+                Reutiliza el mismo audio con un modelo local más preciso. La
+                primera vez descarga 190 MB; después funciona sin conexión.
+              </Body>
+              <Button
+                title="Reintentar con mayor precisión"
+                secondary
+                loading={action.busy}
+                onPress={() => transcribe("precise")}
+              />
+            </Card>
+          )}
           <Notice
             text={
               localMode
-                ? "Whisper base cuantizado se prepara mientras grabas, recorta silencios claros y conserva vocabulario clínico. La primera grabación descarga 60 MB; luego puedes dictar sin conexión hasta 3 minutos. La app rechazará audio demasiado bajo o saturado. Revisa siempre nombres, dosis, cifras y negaciones."
+                ? "Whisper base cuantizado se prepara mientras grabas, recorta silencios claros y conserva vocabulario clínico. La primera grabación descarga 60 MB; luego puedes dictar sin conexión hasta 3 minutos. Si detectas errores, puedes repetir sobre el mismo audio con un modelo más preciso. Revisa siempre nombres, dosis, cifras y negaciones."
                 : "Modo servidor: al pulsar transcribir se sube el audio. Dicta hasta 3 minutos y revisa siempre el resultado."
             }
           />

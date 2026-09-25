@@ -52,6 +52,22 @@ def doctor(client):
     return body, response.json()
 
 
+def staff(client, role, email, unit="Urgencias"):
+    result = client.post(
+        "/admin/invitations", json={"email": email, "unit": unit, "role": role}
+    )
+    assert result.status_code == 201
+    body = {
+        "token": result.json()["token"],
+        "email": email,
+        "name": "Integrante clínica",
+        "password": "ClaveSegura2026!",
+    }
+    response = client.post("/auth/register", json=body)
+    assert response.status_code == 201
+    return response.json()
+
+
 def test_invitation_cannot_grant_admin_and_is_single_use(client, clinics):
     login(client, "admin@clinica-a.test")
     assert (
@@ -65,6 +81,22 @@ def test_invitation_cannot_grant_admin_and_is_single_use(client, clinics):
     assert session["user"]["clinic_id"] == clinics[0].id
     assert client.post("/auth/register", json=invitation).status_code == 400
     assert client.post("/auth/register", json={**invitation, "role": "ADMIN"}).status_code == 422
+
+
+@pytest.mark.parametrize("role", ["PHYSICIAN", "NURSE", "RECORDS_ADMIN"])
+def test_staff_can_find_and_identify_any_active_patient_in_their_clinic(client, clinics, role):
+    login(client, "admin@clinica-a.test")
+    patient = client.post("/admin/patients", json=patient_data()).json()
+    token = client.post(f"/admin/patients/{patient['id']}/nfc/prepare").json()["token"]
+    client.post(f"/admin/patients/{patient['id']}/nfc/activate", json={"token": token})
+    session = staff(client, role, f"{role.lower()}@clinica-a.test", unit="Urgencias")
+    client.headers["Authorization"] = "Bearer " + session["access_token"]
+
+    listed = client.get("/patients")
+    assert listed.status_code == 200
+    assert listed.json()[0]["id"] == patient["id"]
+    assert client.post(f"/patients/{patient['id']}/identify").status_code == 200
+    assert client.post("/nfc/resolve", json={"token": token}).status_code == 200
 
 
 def test_doctor_can_register_and_login_with_eight_letters(client, clinics):

@@ -161,7 +161,7 @@ def valid_scan(db, user, scan_id, confirmed=True):
     if not scan or scan.user_id != user.id:
         raise HTTPException(404, "Lectura no disponible.")
     assignment = db.get(Assignment, scan.assignment_id)
-    encounter = encounter_access(db, user, assignment.encounter_id)
+    encounter = encounter_read_access(db, user, assignment.encounter_id)
     tag = db.get(Tag, scan.tag_id) if scan.tag_id else None
     if (
         scan.expires_at < now()
@@ -459,7 +459,7 @@ def resolve(body: Resolve, user=Depends(get_user), db: Session = Depends(db_sess
         )
     if not assignment:
         raise HTTPException(409, "Esta cama no tiene un paciente asignado.")
-    encounter = encounter_access(db, user, assignment.encounter_id)
+    encounter = encounter_read_access(db, user, assignment.encounter_id)
     if encounter.status != "ACTIVE":
         raise HTTPException(409, "El episodio ya no está activo.")
     scan = Scan(
@@ -523,6 +523,7 @@ def confirm_patient(
 def create_visit(body: CreateVisit, user=Depends(get_user), db: Session = Depends(db_session)):
     require_role(user, CLINICAL_ROLES)
     scan, _, encounter = valid_scan(db, user, body.scan_id)
+    encounter_access(db, user, encounter.id)
     visit = Visit(encounter_id=encounter.id, patient_id=scan.patient_id, scan_id=scan.id, created_by=user.id)
     db.add(visit)
     db.flush()
@@ -813,6 +814,7 @@ def resume_visit(visit_id: str, body: CreateVisit, user=Depends(get_user), db: S
     require_role(user, CLINICAL_ROLES)
     visit = visit_access(db, user, visit_id)
     scan, _, encounter = valid_scan(db, user, body.scan_id)
+    encounter_access(db, user, encounter.id)
     if visit.created_by != user.id or visit.status not in {"DRAFT", "REVIEW_REQUIRED"}:
         raise HTTPException(409, "No se puede reanudar esta visita.")
     if visit.patient_id != scan.patient_id or visit.encounter_id != encounter.id:

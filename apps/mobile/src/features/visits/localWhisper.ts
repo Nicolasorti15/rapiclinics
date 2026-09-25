@@ -10,7 +10,10 @@ export class LocalWhisper {
     );
   }
   async stop(): Promise<void> {}
-  async transcribe(): Promise<string> {
+  async transcribe(
+    _quality: "fast" | "precise" = "fast",
+    _onStatus: (text: string) => void = () => {},
+  ): Promise<string> {
     throw new Error("Transcripción local no disponible.");
   }
   async dispose(): Promise<void> {}

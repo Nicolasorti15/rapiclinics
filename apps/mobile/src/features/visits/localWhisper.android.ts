@@ -5,9 +5,12 @@ import { MEDICAL_TRANSCRIPTION_PROMPT } from "./medicalVocabulary";
 
 export const localWhisperAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
-const MODEL_URL =
+const FAST_MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin";
-const MODEL_SIZE = 59707625;
+const FAST_MODEL_SIZE = 59707625;
+const PRECISE_MODEL_URL =
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin";
+const PRECISE_MODEL_SIZE = 190085487;
 type Stream = {
   init(options: {
     sampleRate: number;
@@ -28,6 +31,7 @@ export class LocalWhisper {
   private job?: ReturnType<WhisperContext["transcribeData"]>;
   private context?: WhisperContext;
   private contextPromise?: Promise<WhisperContext>;
+  private contextModelPath?: string;
   private closed = false;
   private recording = false;
   private modelPath?: string;
@@ -43,43 +47,7 @@ export class LocalWhisper {
         "Whisper requiere la app Android compilada; no funciona en Expo Go.",
       );
     await this.stopping;
-    const fs = await import("expo-file-system/legacy");
-    if (!fs.documentDirectory)
-      throw new Error("No hay almacenamiento disponible para el modelo.");
-    const path = fs.documentDirectory + "whisper-base-q5-fast.bin";
-    const info = await fs.getInfoAsync(path);
-    if (!info.exists || info.size !== MODEL_SIZE) {
-      onStatus("Descargando modelo clínico rápido (60 MB)…");
-      const partial = path + ".partial";
-      try {
-        const response = await fs.downloadAsync(MODEL_URL, partial);
-        const downloaded = await fs.getInfoAsync(partial);
-        if (
-          response.status !== 200 ||
-          !downloaded.exists ||
-          downloaded.size !== MODEL_SIZE
-        )
-          throw new Error(
-            "La descarga del modelo quedó incompleta. Reintenta con conexión.",
-          );
-        await fs.deleteAsync(path, { idempotent: true });
-        await fs.moveAsync({ from: partial, to: path });
-        await fs.deleteAsync(
-          fs.documentDirectory + "whisper-tiny-multilingual.bin",
-          { idempotent: true },
-        );
-        await fs.deleteAsync(
-          fs.documentDirectory + "whisper-base-multilingual.bin",
-          { idempotent: true },
-        );
-        await fs.deleteAsync(
-          fs.documentDirectory + "whisper-small-q5-clinical.bin",
-          { idempotent: true },
-        );
-      } finally {
-        await fs.deleteAsync(partial, { idempotent: true });
-      }
-    }
+    const path = await this.ensureModel("fast", onStatus);
     if (this.closed) throw new Error("Grabación cancelada.");
     this.modelPath = path;
     void this.prepareContext().catch(() => {});
@@ -113,16 +81,72 @@ export class LocalWhisper {
     onStatus("");
   }
 
+  private async ensureModel(
+    quality: "fast" | "precise",
+    onStatus: (text: string) => void,
+  ) {
+    const fs = await import("expo-file-system/legacy");
+    if (!fs.documentDirectory)
+      throw new Error("No hay almacenamiento disponible para el modelo.");
+    const precise = quality === "precise";
+    const path =
+      fs.documentDirectory +
+      (precise ? "whisper-small-q5-clinical.bin" : "whisper-base-q5-fast.bin");
+    const size = precise ? PRECISE_MODEL_SIZE : FAST_MODEL_SIZE;
+    const url = precise ? PRECISE_MODEL_URL : FAST_MODEL_URL;
+    const info = await fs.getInfoAsync(path);
+    if (info.exists && info.size === size) return path;
+
+    onStatus(
+      precise
+        ? "Descargando modelo de mayor precisión (190 MB), solo esta vez…"
+        : "Descargando modelo clínico rápido (60 MB)…",
+    );
+    const partial = path + ".partial";
+    try {
+      const response = await fs.downloadAsync(url, partial);
+      const downloaded = await fs.getInfoAsync(partial);
+      if (response.status !== 200 || !downloaded.exists || downloaded.size !== size)
+        throw new Error(
+          "La descarga del modelo quedó incompleta. Reintenta con conexión.",
+        );
+      await fs.deleteAsync(path, { idempotent: true });
+      await fs.moveAsync({ from: partial, to: path });
+      if (!precise) {
+        await fs.deleteAsync(
+          fs.documentDirectory + "whisper-tiny-multilingual.bin",
+          { idempotent: true },
+        );
+        await fs.deleteAsync(
+          fs.documentDirectory + "whisper-base-multilingual.bin",
+          { idempotent: true },
+        );
+      }
+    } finally {
+      await fs.deleteAsync(partial, { idempotent: true });
+    }
+    return path;
+  }
+
   private prepareContext(): Promise<WhisperContext> {
-    if (this.context) return Promise.resolve(this.context);
-    if (this.contextPromise) return this.contextPromise;
+    if (this.context && this.contextModelPath === this.modelPath)
+      return Promise.resolve(this.context);
+    if (this.contextPromise)
+      return this.contextPromise.then(() => this.prepareContext());
     if (!this.modelPath)
       return Promise.reject(new Error("Modelo no disponible."));
 
-    this.contextPromise = import("whisper.rn/index")
+    const requestedPath = this.modelPath;
+    this.contextPromise = Promise.resolve()
+      .then(async () => {
+        if (this.context) await this.context.release();
+        this.context = undefined;
+        this.contextModelPath = undefined;
+        return import("whisper.rn/index");
+      })
       .then(({ initWhisper }) =>
         initWhisper({
-          filePath: this.modelPath!,
+          filePath: requestedPath,
           useGpu: false,
         }),
       )
@@ -132,6 +156,7 @@ export class LocalWhisper {
           throw new Error("Transcripción cancelada.");
         }
         this.context = context;
+        this.contextModelPath = requestedPath;
         return context;
       })
       .finally(() => {
@@ -154,20 +179,27 @@ export class LocalWhisper {
     return this.stopping;
   }
 
-  async transcribe(): Promise<string> {
+  async transcribe(
+    quality: "fast" | "precise" = "fast",
+    onStatus: (text: string) => void = () => {},
+  ): Promise<string> {
     await this.stop();
     this.capture.assertUsable();
     const data = this.capture.transcriptionData();
     if (this.closed) throw new Error("Transcripción cancelada.");
     if (!this.modelPath) throw new Error("Graba un audio primero.");
+    if (quality === "precise") {
+      this.modelPath = await this.ensureModel("precise", onStatus);
+      onStatus("Analizando nuevamente con mayor precisión…");
+    }
     const context = await this.prepareContext();
     if (this.closed) throw new Error("Transcripción cancelada.");
     this.job = context.transcribeData(data, {
       language: "es",
       translate: false,
       prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-      beamSize: 2,
-      bestOf: 2,
+      beamSize: quality === "precise" ? 4 : 2,
+      bestOf: quality === "precise" ? 4 : 2,
       temperature: 0,
     });
     try {
@@ -191,6 +223,7 @@ export class LocalWhisper {
     await this.contextPromise?.catch(() => {});
     await this.context?.release();
     this.context = undefined;
+    this.contextModelPath = undefined;
     this.capture.clear();
   }
 }

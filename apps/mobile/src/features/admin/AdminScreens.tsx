@@ -34,6 +34,9 @@ export function AdminScreen({ navigation }: Props<"Admin">) {
   const users = useResource<User[]>("/admin/users");
   const [email, setEmail] = useState("");
   const [unit, setUnit] = useState("Medicina interna");
+  const [role, setRole] = useState<"PHYSICIAN" | "NURSE" | "RECORDS_ADMIN">(
+    "PHYSICIAN",
+  );
   const [invitation, setInvitation] = useState<{
     token: string;
     email: string;
@@ -59,30 +62,49 @@ export function AdminScreen({ navigation }: Props<"Admin">) {
         onPress={() => navigation.navigate("RegisterPatient")}
       />
       <Card>
-        <Text style={s.subtitle}>Invitar a un médico</Text>
+        <Text style={s.subtitle}>Invitar al equipo asistencial</Text>
         <Body muted>
-          El médico define su contraseña al aceptar la invitación. El permiso
-          será de médico, nunca de administrador.
+          La persona define su contraseña al aceptar la invitación. Todos los
+          perfiles pueden consultar pacientes de la clínica; las acciones
+          clínicas y administrativas siguen protegidas por rol.
         </Body>
         <Field
-          label="Correo laboral del médico"
+          label="Correo laboral"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
         />
         <Field
-          label="Servicio autorizado"
+          label="Servicio principal"
           value={unit}
           onChangeText={setUnit}
         />
+        <Label>ROL</Label>
+        <View style={{ gap: 8 }}>
+          <Button
+            title={role === "PHYSICIAN" ? "✓ Médico" : "Médico"}
+            secondary={role !== "PHYSICIAN"}
+            onPress={() => setRole("PHYSICIAN")}
+          />
+          <Button
+            title={role === "NURSE" ? "✓ Enfermería" : "Enfermería"}
+            secondary={role !== "NURSE"}
+            onPress={() => setRole("NURSE")}
+          />
+          <Button
+            title={role === "RECORDS_ADMIN" ? "✓ Administrativo" : "Administrativo"}
+            secondary={role !== "RECORDS_ADMIN"}
+            onPress={() => setRole("RECORDS_ADMIN")}
+          />
+        </View>
         <Button
           title="Crear invitación"
           loading={action.busy}
           onPress={() =>
             action.run(async () => {
               setInvitation(
-                await api("/admin/invitations", "POST", { email, unit }),
+                await api("/admin/invitations", "POST", { email, unit, role }),
               );
             })
           }
@@ -113,7 +135,7 @@ export function AdminScreen({ navigation }: Props<"Admin">) {
           <Text style={s.small}>
             {user.role} · {user.unit} · {user.active ? "Activo" : "Desactivado"}
           </Text>
-          {user.role === "PHYSICIAN" &&
+          {!isAdmin(user.role) &&
             user.active &&
             (deactivate === user.id ? (
               <>

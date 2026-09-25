@@ -1,14 +1,15 @@
-# Clínicas, médicos, pacientes y NFC
+# Clínicas, equipo asistencial, pacientes y NFC
 
 La versión 1.1 incorpora cuentas por clínica, invitaciones para médicos, pacientes identificados por cédula de ciudadanía y administración de NFC. El APK local sigue conectado al entorno de pruebas. La instalación clínica necesita un servidor configurado y los datos del primer administrador; todavía no están definidos por el propietario.
 
 ## Acceso
 
-- **ADMIN:** registra pacientes, escribe/activa/revoca etiquetas, invita médicos y desactiva sus cuentas. No se obtiene este rol por escribir un correo específico. El primer administrador se crea desde la consola del servidor.
-- **PHYSICIAN:** consulta pacientes y atiende en su clínica y servicio autorizado. No registra pacientes, emite invitaciones ni modifica NFC.
-- Las invitaciones caducan en 24 horas y sirven una sola vez para el correo indicado. Solo se almacena su hash. El médico establece una contraseña de al menos 8 caracteres, sin exigir símbolos ni mayúsculas en «Tengo una invitación». ADMIN comparte el código personalmente por un canal laboral; la app no envía correo ni afirma haber verificado automáticamente la titularidad del buzón.
+- **ADMIN:** registra pacientes, escribe/activa/revoca etiquetas, invita al equipo y desactiva cuentas. No se obtiene este rol por escribir un correo específico. El primer administrador se crea desde la consola del servidor.
+- **PHYSICIAN y NURSE:** consultan los pacientes activos de su clínica por nombre, cédula, habitación o NFC. Pueden abrir la ficha de cualquier servicio; la escritura clínica continúa limitada al servicio principal asignado.
+- **RECORDS_ADMIN:** consulta e identifica pacientes de toda la clínica y gestiona documentación, pero la app no le muestra la acción de crear evoluciones.
+- Las invitaciones caducan en 24 horas y sirven una sola vez para el correo y rol indicados. Solo se almacena su hash. La persona establece una contraseña de al menos 8 caracteres, sin exigir símbolos ni mayúsculas en «Tengo una invitación». ADMIN comparte el código personalmente por un canal laboral; la app no envía correo ni afirma haber verificado automáticamente la titularidad del buzón.
 - Se puede exigir un dominio laboral exacto por clínica. En esta versión un correo pertenece a una única cuenta/clínica; membresías de un mismo médico en varias clínicas necesitan una ampliación del modelo.
-- Las contraseñas se guardan con Argon2. Desactivar un médico revoca sus sesiones y conserva los registros clínicos.
+- Las contraseñas se guardan con Argon2. Desactivar a un integrante revoca sus sesiones y conserva los registros clínicos.
 
 ## Pacientes y etiquetas
 
