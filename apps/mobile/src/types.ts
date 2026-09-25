@@ -68,6 +68,33 @@ export type ClinicalDocument = {
   ehr_status: string;
   extraction: { text: string; summary: string; identifiers: string[] };
 };
+export type ClinicalBrief = {
+  generated_at: string;
+  method: string;
+  disclaimer: string;
+  overview: string;
+  key_points: {
+    kind: "allergy" | "evolution" | "document";
+    label: string;
+    text: string;
+    source_id: string;
+    source_type: "patient" | "visit" | "document";
+  }[];
+  open_tasks: { id: string; text: string; due_at: string | null }[];
+  lab_trends: {
+    date: string;
+    value: number;
+    analyte: string;
+    unit: string;
+    report_id: string;
+    filename: string;
+    previous_date: string | null;
+    previous_value: number | null;
+    delta: number | null;
+    direction: "aumentó" | "disminuyó" | "estable" | "sin comparación";
+    count: number;
+  }[];
+};
 export type Routes = {
   Admin: undefined;
   RegisterPatient: undefined;

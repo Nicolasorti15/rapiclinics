@@ -29,6 +29,7 @@ import { isAdmin } from "./admin/AdminScreens";
 import { formatBirthDate } from "./admin/birthDate";
 import { PatientDrafts } from "./visits/PatientDrafts";
 import { HomeBanner } from "./ads/HomeBanner";
+import { ClinicalBriefCard } from "./summary/ClinicalBriefCard";
 
 type Props<T extends keyof Routes> = NativeStackScreenProps<Routes, T>;
 
@@ -589,6 +590,7 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
           <Body muted>{patient.allergies}</Body>
         </View>
       </Card>
+      <ClinicalBriefCard patientId={patient.id} />
       {session?.user.role !== "ADMIN" && (
         <>
           <PatientDrafts

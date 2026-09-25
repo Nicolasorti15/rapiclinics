@@ -90,7 +90,24 @@ class DocumentSummaryProvider(Protocol):
 
 class ExtractiveDocumentSummary:
     def summarize(self, text: str) -> str:
-        return text[:1200] if text else "Sin capa de texto. Revisa el PDF original; OCR no disponible."
+        if not text.strip():
+            return "Sin capa de texto. Revisa el PDF original; OCR no disponible."
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+        lines = [line for line in lines if line]
+        keywords = re.compile(
+            r"\b(hallazg|resultado|conclusi|impresi|evoluci|alerg|medicamento|dosis|pendiente|"
+            r"hemoglobina|hematocrito|leucocito|plaqueta|creatinina|glucosa|sodio|potasio|tsh|hba1c)\w*\b",
+            re.I,
+        )
+        ranked = [
+            (index, line)
+            for index, line in enumerate(lines)
+            if keywords.search(line) or re.search(r"\b\d+(?:[.,]\d+)?\s*(?:mg|g|mmol|mEq|U|%)/?\w*", line, re.I)
+        ]
+        selected = sorted(ranked[:8], key=lambda item: item[0])
+        summary = "\n".join(line for _, line in selected)
+        # Extracted lines remain verbatim except whitespace normalization.
+        return (summary or "\n".join(lines))[:1200]
 
 
 def identity_match(text: str, identifier: str):

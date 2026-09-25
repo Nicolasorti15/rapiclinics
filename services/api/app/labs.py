@@ -24,6 +24,59 @@ from .security import CLINICAL_ROLES, audit, encounter_access, encounter_read_ac
 
 router = APIRouter()
 
+ANALYTE_ALIASES = {
+    "wbc": "Leucocitos",
+    "glóbulos blancos": "Leucocitos",
+    "globulos blancos": "Leucocitos",
+    "leucocitos": "Leucocitos",
+    "rbc": "Eritrocitos",
+    "glóbulos rojos": "Eritrocitos",
+    "globulos rojos": "Eritrocitos",
+    "eritrocitos": "Eritrocitos",
+    "hemoglobina": "Hemoglobina",
+    "hematocrito": "Hematocrito",
+    "vcm": "VCM",
+    "mcv": "VCM",
+    "hcm": "HCM",
+    "mch": "HCM",
+    "rdw": "RDW",
+    "plaquetas": "Plaquetas",
+    "neutrófilos": "Neutrófilos",
+    "neutrofilos": "Neutrófilos",
+    "linfocitos": "Linfocitos",
+    "eosinófilos": "Eosinófilos",
+    "eosinofilos": "Eosinófilos",
+    "basófilos": "Basófilos",
+    "basofilos": "Basófilos",
+    "glucosa": "Glucosa",
+    "creatinina": "Creatinina",
+    "urea": "Urea",
+    "bun": "BUN",
+    "sodio": "Sodio",
+    "potasio": "Potasio",
+    "cloro": "Cloro",
+    "calcio": "Calcio",
+    "ast": "AST/TGO",
+    "tgo": "AST/TGO",
+    "alt": "ALT/TGP",
+    "tgp": "ALT/TGP",
+    "bilirrubina total": "Bilirrubina total",
+    "albúmina": "Albúmina",
+    "albumina": "Albúmina",
+    "proteína c reactiva": "Proteína C reactiva",
+    "proteina c reactiva": "Proteína C reactiva",
+    "pcr": "Proteína C reactiva",
+    "inr": "INR",
+    "tsh": "TSH",
+    "hba1c": "HbA1c",
+    "hemoglobina glicosilada": "HbA1c",
+}
+
+
+def normalize_analyte(value: str) -> str:
+    clean = re.sub(r"\s+", " ", value).strip()
+    return ANALYTE_ALIASES.get(clean.casefold(), clean)
+
 
 class LabRow(StrictModel):
     analyte: str = Field(min_length=1, max_length=80)
@@ -37,6 +90,11 @@ class LabRow(StrictModel):
         if not value.strip():
             raise ValueError("No se aceptan campos vacíos")
         return value.strip()
+
+    @field_validator("analyte")
+    @classmethod
+    def canonical_analyte(cls, value):
+        return normalize_analyte(value)
 
     @field_validator("date")
     @classmethod
@@ -60,16 +118,30 @@ def extract_rows(text: str, csv_file: bool) -> list[dict]:
         if not {"fecha", "variable", "valor", "unidad", "paciente"}.issubset(source.fieldnames or []):
             raise HTTPException(422, "CSV requiere columnas paciente, fecha, variable, valor, unidad.")
         rows = [
-            {"date": r["fecha"], "analyte": r["variable"], "value": r["valor"], "unit": r["unidad"]}
+            {
+                "date": r["fecha"],
+                "analyte": normalize_analyte(r["variable"]),
+                "value": r["valor"],
+                "unit": r["unidad"],
+            }
             for r in source
         ]
     else:
         dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
         dated = dates[0] if len(set(dates)) == 1 else ""
         # Conservative recognizer. Ambiguous dates stay blank for human review.
-        pattern = r"(?im)^\s*(leucocitos|glóbulos blancos|globulos blancos|WBC|hemoglobina|hematocrito|plaquetas|neutrófilos|neutrofilos|linfocitos|glucosa|creatinina)\s*[:\t ]+([0-9]+(?:[.,][0-9]+)?)\s+([^\r\n]+)"
+        names = "|".join(
+            re.escape(name)
+            for name in sorted(ANALYTE_ALIASES, key=len, reverse=True)
+        )
+        pattern = rf"(?im)^\s*({names})\s*[:\t ]+([0-9]+(?:[.,][0-9]+)?)\s+([^\r\n]+)"
         rows = [
-            {"date": dated, "analyte": m[0], "value": m[1], "unit": m[2].strip()}
+            {
+                "date": dated,
+                "analyte": normalize_analyte(m[0]),
+                "value": m[1],
+                "unit": m[2].strip(),
+            }
             for m in re.findall(pattern, text)
         ]
     if len(rows) > 100:

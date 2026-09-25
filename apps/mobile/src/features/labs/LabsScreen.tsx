@@ -17,12 +17,14 @@ import {
   Loading,
   Notice,
   Page,
+  s,
   Title,
 } from "../../components/ui";
 import { useAction, useResource } from "../core";
 import type { Routes } from "../../types";
 import { previewPdf } from "../documents/files";
 import { PdfPreview } from "../documents/PdfPreview";
+import { describeLabSeries } from "./labInsights";
 
 type Row = {
   date: string;
@@ -96,6 +98,7 @@ export function LabsScreen({ route }: NativeStackScreenProps<Routes, "Labs">) {
         (!to || p.date <= to),
     )
     .sort((a, b) => a.date.localeCompare(b.date));
+  const insight = describeLabSeries(series);
   const choose = () =>
     action.run(async () => {
       const result = await DocumentPicker.getDocumentAsync({
@@ -349,6 +352,25 @@ export function LabsScreen({ route }: NativeStackScreenProps<Routes, "Labs">) {
                   error
                   text="Usa fechas AAAA-MM-DD y un intervalo válido."
                 />
+              )}
+              {insight && (
+                <Card>
+                  <Label>RESUMEN DESCRIPTIVO · SIN DIAGNÓSTICO</Label>
+                  <Text style={s.subtitle}>
+                    Último: {insight.latest.value} {insight.unit}
+                  </Text>
+                  <Body>
+                    {insight.latest.date}
+                    {insight.previous
+                      ? ` · ${insight.direction} ${Math.abs(insight.delta || 0).toLocaleString("es-CO")} ${insight.unit} respecto al resultado anterior del ${insight.previous.date}.`
+                      : " · Solo hay un resultado confirmado para esta variable."}
+                  </Body>
+                  <Body muted>
+                    Rango observado: {insight.minimum}–{insight.maximum}{" "}
+                    {insight.unit} · {insight.count} resultados. Describe los
+                    datos cargados; no indica normalidad ni enfermedad.
+                  </Body>
+                </Card>
               )}
               <Trend points={series} onSelect={setPoint} />
               {point && (

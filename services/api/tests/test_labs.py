@@ -4,6 +4,7 @@ import pytest
 from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
+from app.labs import extract_rows
 from app.models import Encounter, LabReport, User
 
 
@@ -90,6 +91,31 @@ def test_lab_pdf_extraction_and_original(client, context):
     assert report["rows"][0]["date"] == "2026-09-12"
     assert client.get(f"/labs/{report['id']}/file").content == buffer.getvalue()
     assert confirm(client, context, report).status_code == 200
+
+
+def test_extended_analytes_are_canonicalized():
+    rows = extract_rows(
+        "2026-09-12\nSodio: 139 mmol/L\nTGO: 25 U/L\nHemoglobina glicosilada: 5.7 %",
+        False,
+    )
+    assert [row["analyte"] for row in rows] == ["Sodio", "AST/TGO", "HbA1c"]
+
+
+def test_grounded_brief_reports_numeric_direction_without_diagnosis(client, context):
+    first = upload(client, context).json()
+    assert confirm(client, context, first).status_code == 200
+    second_csv = CSV.replace(b"2026-09-01", b"2026-09-10").replace(b"8.2", b"6.5")
+    second = upload(client, context, second_csv, "hemograma-2.csv").json()
+    assert confirm(client, context, second).status_code == 200
+
+    response = client.get(f"/patients/{context['patient']['id']}/clinical-brief")
+    assert response.status_code == 200
+    brief = response.json()
+    leucocytes = next(item for item in brief["lab_trends"] if item["analyte"] == "Leucocitos")
+    assert leucocytes["value"] == 6.5
+    assert leucocytes["direction"] == "disminuyó"
+    assert leucocytes["report_id"] == second["id"]
+    assert "No diagnostica" in brief["disclaimer"]
 
 
 def test_lab_cross_unit_read_allowed_but_confirmation_stays_restricted(client, context, db):

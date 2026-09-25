@@ -21,6 +21,7 @@ from .models import (
     Document,
     Encounter,
     Extraction,
+    LabReport,
     Patient,
     Scan,
     Tag,
@@ -304,6 +305,133 @@ def patient(patient_id: str, user=Depends(get_user), db: Session = Depends(db_se
     audit(db, user, "patient_view", patient_id)
     db.commit()
     return result
+
+
+@app.get("/patients/{patient_id}/clinical-brief")
+def clinical_brief(patient_id: str, user=Depends(get_user), db: Session = Depends(db_session)):
+    """Grounded patient brief. It reports stored facts and numeric direction only."""
+    patient = patient_context(db, user, patient_id)
+    visits = db.scalars(
+        select(Visit)
+        .where(Visit.patient_id == patient_id, Visit.status == "CONFIRMED")
+        .order_by(Visit.created_at.desc())
+        .limit(5)
+    ).all()
+    tasks = db.scalars(
+        select(Task)
+        .where(Task.patient_id == patient_id, Task.status == "OPEN")
+        .order_by(Task.created_at.desc())
+        .limit(10)
+    ).all()
+    documents = db.execute(
+        select(Document, Extraction)
+        .join(Extraction, Extraction.document_id == Document.id)
+        .where(Document.patient_id == patient_id, Document.status == "VALIDATED")
+        .order_by(Document.created_at.desc())
+        .limit(3)
+    ).all()
+    reports = db.scalars(
+        select(LabReport)
+        .where(LabReport.patient_id == patient_id, LabReport.status == "CONFIRMED")
+        .order_by(LabReport.created_at.desc())
+    ).all()
+
+    key_points = []
+    if patient["allergies"].strip():
+        key_points.append(
+            {
+                "kind": "allergy",
+                "label": "Alergias registradas",
+                "text": patient["allergies"].strip(),
+                "source_id": patient_id,
+                "source_type": "patient",
+            }
+        )
+    for visit in visits[:3]:
+        reviewed = (visit.note or {}).get("reviewed_evolution", "").strip()
+        if reviewed:
+            key_points.append(
+                {
+                    "kind": "evolution",
+                    "label": f"Evolución del {visit.confirmed_at or visit.created_at}",
+                    "text": reviewed[:1200],
+                    "source_id": visit.id,
+                    "source_type": "visit",
+                }
+            )
+    for document, extraction in documents:
+        if extraction.summary.strip():
+            key_points.append(
+                {
+                    "kind": "document",
+                    "label": document.filename,
+                    "text": extraction.summary.strip()[:1200],
+                    "source_id": document.id,
+                    "source_type": "document",
+                }
+            )
+
+    grouped = defaultdict(list)
+    for report in reports:
+        for row in report.rows or []:
+            try:
+                value = float(row["value"])
+                analyte = str(row["analyte"]).strip()
+                unit = str(row["unit"]).strip()
+                measured = str(row["date"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            grouped[(analyte.casefold(), unit)].append(
+                {
+                    "date": measured,
+                    "value": value,
+                    "analyte": analyte,
+                    "unit": unit,
+                    "report_id": report.id,
+                    "filename": report.filename,
+                }
+            )
+    lab_trends = []
+    for values in grouped.values():
+        values.sort(key=lambda item: item["date"])
+        latest = values[-1]
+        previous = values[-2] if len(values) > 1 else None
+        direction = "sin comparación"
+        delta = None
+        if previous:
+            delta = latest["value"] - previous["value"]
+            tolerance = max(abs(previous["value"]) * 0.001, 1e-9)
+            direction = "estable" if abs(delta) <= tolerance else ("aumentó" if delta > 0 else "disminuyó")
+        lab_trends.append(
+            {
+                **latest,
+                "previous_date": previous["date"] if previous else None,
+                "previous_value": previous["value"] if previous else None,
+                "delta": delta,
+                "direction": direction,
+                "count": len(values),
+            }
+        )
+    lab_trends.sort(key=lambda item: (item["analyte"].casefold(), item["unit"]))
+
+    response = {
+        "generated_at": now(),
+        "method": "grounded-extractive-v1",
+        "disclaimer": "Resume información registrada y cambios numéricos. No diagnostica ni recomienda conductas.",
+        "overview": (
+            f"{len(visits)} evoluciones confirmadas, {len(documents)} documentos validados, "
+            f"{len(reports)} informes de laboratorio y {len(tasks)} pendientes abiertos revisados."
+        ),
+        "key_points": key_points[:8],
+        "open_tasks": [
+            {"id": task.id, "text": task.description, "due_at": task.due_at}
+            for task in tasks
+        ],
+        "lab_trends": lab_trends,
+    }
+    audit(db, user, "clinical_brief_viewed", patient_id)
+    db.commit()
+    return response
 
 
 @app.post("/nfc/resolve")
