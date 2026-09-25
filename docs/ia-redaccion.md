@@ -2,9 +2,9 @@
 
 ## Implementado
 
-El audio se guarda cifrado en el servidor de RAPICLINICS y se transcribe allí con faster-whisper. No se envía a una API externa de IA. El modelo `small` se descarga la primera vez; después puede funcionar sin conexión si los pesos están en caché. Configuración `WHISPER_MODEL`, CPU int8, español, máximo 3 minutos y 10 MB por audio. El procesamiento tiene coste de recursos del equipo, pero no cobro por petición de IA.
+En modo servidor, el audio se guarda cifrado en RAPICLINICS y se transcribe con faster-whisper `base`, CPU int8 y español fijo. En Android, el modo local usa Whisper base cuantizado y conserva el audio solo en memoria. Ninguna ruta envía el audio a una API externa de IA. El máximo es de 3 minutos; el procesamiento consume recursos, pero no genera cobros por petición.
 
-La visita conserva por separado la transcripción original y el texto editable del médico. El formateador actual mejora espacios, mayúsculas y puntuación y muestra una propuesta opcional. **No es todavía un redactor generativo capaz de reorganizar una narración extensa.** La extracción de pendientes también exige revisión antes de confirmar.
+La visita conserva por separado la transcripción original y el texto editable del médico. En Android, Qwen3 0.6B se prepara después de transcribir y solo genera una redacción opcional; la evolución, los pendientes, las incertidumbres y sus fragmentos fuente se construyen de forma determinista. La salida admite texto alrededor del JSON y, si el modelo tarda más de 2,5 segundos, falla o entrega contenido no fundamentado, se usa inmediatamente la propuesta conservadora. El servidor vuelve a comprobar que la redacción no introduzca vocabulario clínico ni cifras ausentes. Toda propuesta exige revisión antes de confirmar.
 
 Prueba real con voz española sintética: el modelo transcribió el audio, pero convirtió «treinta y siete» en «30 y 7» y «revisar hemograma» en «revisaremos grama». Esto demuestra funcionamiento técnico, no precisión clínica. No se corrigen automáticamente estos errores suponiendo qué quiso decir el médico.
 

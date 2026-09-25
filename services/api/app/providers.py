@@ -60,6 +60,14 @@ def conservative_redaction(parts: list[str]) -> str:
     return " ".join(sentences)
 
 
+def grounded_redaction(suggestion: str, transcript: str) -> bool:
+    """Reject new clinical vocabulary and changed numbers in a local proposal."""
+    allowed_connectors = {"a", "al", "de", "del", "el", "en", "la", "las", "los", "por", "se", "su", "y"}
+    source = set(re.findall(r"[^\W_]+", transcript.casefold(), flags=re.UNICODE))
+    proposed = re.findall(r"[^\W_]+", suggestion.casefold(), flags=re.UNICODE)
+    return bool(proposed) and all(token in source or token in allowed_connectors for token in proposed)
+
+
 class DocumentExtractionProvider(Protocol):
     def extract(self, content: bytes) -> str: ...
 
@@ -102,7 +110,8 @@ class ExtractiveDocumentSummary:
         ranked = [
             (index, line)
             for index, line in enumerate(lines)
-            if keywords.search(line) or re.search(r"\b\d+(?:[.,]\d+)?\s*(?:mg|g|mmol|mEq|U|%)/?\w*", line, re.I)
+            if keywords.search(line)
+            or re.search(r"\b\d+(?:[.,]\d+)?\s*(?:mg|g|mmol|mEq|U|%)/?\w*", line, re.I)
         ]
         selected = sorted(ranked[:8], key=lambda item: item[0])
         summary = "\n".join(line for _, line in selected)

@@ -34,6 +34,7 @@ from .providers import (
     ExtractiveDocumentSummary,
     MockEhrAdapter,
     PdfTextExtractor,
+    grounded_redaction,
     identity_match,
 )
 from .schemas import (
@@ -292,10 +293,7 @@ def patients(user=Depends(get_user), db: Session = Depends(db_session)):
 
     patient_ids = list(dict.fromkeys(encounter.patient_id for encounter in encounters))
 
-    return [
-        patient_context(db, user, patient_id)
-        for patient_id in patient_ids
-    ]
+    return [patient_context(db, user, patient_id) for patient_id in patient_ids]
 
 
 @app.get("/patients/{patient_id}")
@@ -423,10 +421,7 @@ def clinical_brief(patient_id: str, user=Depends(get_user), db: Session = Depend
             f"{len(reports)} informes de laboratorio y {len(tasks)} pendientes abiertos revisados."
         ),
         "key_points": key_points[:8],
-        "open_tasks": [
-            {"id": task.id, "text": task.description, "due_at": task.due_at}
-            for task in tasks
-        ],
+        "open_tasks": [{"id": task.id, "text": task.description, "due_at": task.due_at} for task in tasks],
         "lab_trends": lab_trends,
     }
     audit(db, user, "clinical_brief_viewed", patient_id)
@@ -634,12 +629,23 @@ def local_structure(
             "Añade una transcripción antes de continuar.",
         )
 
-    allowed_method = "qwen3-1.7b-q4_k_m-local-v1"
+    allowed_methods = {
+        "qwen3-1.7b-q4_k_m-local-v1",
+        "qwen3-0.6b-q4_k_m-fast-local-v1",
+        "qwen3-0.6b-q4_k_m-fast-local-v2",
+        "local-conservative-fast-v2",
+    }
 
-    if body.redaction_method != allowed_method:
+    if body.redaction_method not in allowed_methods:
         raise HTTPException(
             422,
             "Método de redacción local no reconocido.",
+        )
+
+    if not grounded_redaction(body.suggested_evolution, visit.transcript):
+        raise HTTPException(
+            422,
+            "La redacción propuesta contiene información que no está en la transcripción.",
         )
 
     def validated_items(items):
@@ -667,7 +673,7 @@ def local_structure(
         "tasks": validated_items(body.tasks),
         "uncertainties": validated_items(body.uncertainties),
         "suggested_evolution": body.suggested_evolution,
-        "redaction_method": allowed_method,
+        "redaction_method": body.redaction_method,
     }
 
     visit.status = "REVIEW_REQUIRED"
@@ -677,11 +683,12 @@ def local_structure(
         user,
         "visit_local_structure",
         visit.id,
-        redaction_method=allowed_method,
+        redaction_method=body.redaction_method,
     )
 
     db.commit()
     return serialize(visit, {"audio_key"})
+
 
 @app.post("/visits/{visit_id}/structure")
 def structure(visit_id: str, user=Depends(get_user), db: Session = Depends(db_session)):

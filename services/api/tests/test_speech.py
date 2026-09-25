@@ -26,6 +26,7 @@ def test_transcription_uses_medical_context(monkeypatch):
     assert calls["options"]["without_timestamps"] is True
     assert "leucocitos" in calls["options"]["initial_prompt"]
     assert "creatinina" in calls["options"]["hotwords"]
+    assert "piperacilina" in calls["options"]["hotwords"]
 
 
 @pytest.mark.parametrize(

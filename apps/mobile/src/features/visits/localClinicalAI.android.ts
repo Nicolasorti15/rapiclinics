@@ -1,5 +1,11 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import type { NoteItem } from "../../types";
+import type { LlamaContext } from "llama.rn";
+import {
+  buildFastClinicalProposal,
+  isGroundedRedaction,
+  parseJsonObject,
+  type FastClinicalProposal,
+} from "./clinicalNote";
 
 export const localClinicalAIAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
@@ -10,110 +16,31 @@ const MODEL_URL =
 const MODEL_FILENAME = "qwen3-0.6b-q4_k_m.gguf";
 const MODEL_SIZE = 396705472;
 
-type RawItem = {
-  text: string;
-  source_span: string;
-};
-
 type RawProposal = {
-  evolution: RawItem[];
-  tasks: RawItem[];
-  uncertainties: RawItem[];
   suggested_evolution: string;
 };
 
-export type LocalClinicalProposal = {
-  evolution: NoteItem[];
-  tasks: NoteItem[];
-  uncertainties: NoteItem[];
-  suggested_evolution: string;
-  redaction_method: string;
-};
-
-const itemSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["text", "source_span"],
-  properties: {
-    text: { type: "string" },
-    source_span: { type: "string" },
-  },
-};
+export type LocalClinicalProposal = FastClinicalProposal;
 
 const proposalSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["evolution", "tasks", "uncertainties", "suggested_evolution"],
+  required: ["suggested_evolution"],
   properties: {
-    evolution: {
-      type: "array",
-      items: itemSchema,
-    },
-    tasks: {
-      type: "array",
-      items: itemSchema,
-    },
-    uncertainties: {
-      type: "array",
-      items: itemSchema,
-    },
     suggested_evolution: {
       type: "string",
     },
   },
 };
 
-function validateItem(item: RawItem, transcript: string): NoteItem {
-  const text = item?.text?.trim();
-  const sourceSpan = item?.source_span?.trim();
-
-  if (!text || !sourceSpan)
-    throw new Error("La IA local produjo un elemento incompleto.");
-
-  if (!transcript.includes(sourceSpan))
-    throw new Error(
-      "La IA local produjo una referencia que no existe en la transcripción.",
-    );
-
-  return {
-    text,
-    source_span: sourceSpan,
-    requires_review: true,
-  };
-}
-
-function validateProposal(
-  value: RawProposal,
-  transcript: string,
-): LocalClinicalProposal {
-  if (
-    !value ||
-    !Array.isArray(value.evolution) ||
-    !Array.isArray(value.tasks) ||
-    !Array.isArray(value.uncertainties) ||
-    typeof value.suggested_evolution !== "string"
-  )
-    throw new Error("La IA local devolvió una estructura no válida.");
-
-  return {
-    evolution: value.evolution.map((item) => validateItem(item, transcript)),
-    tasks: value.tasks.map((item) => validateItem(item, transcript)),
-    uncertainties: value.uncertainties.map((item) =>
-      validateItem(item, transcript),
-    ),
-    suggested_evolution: value.suggested_evolution.trim() || transcript.trim(),
-    redaction_method: "qwen3-0.6b-q4_k_m-fast-local-v1",
-  };
-}
-
 export class LocalClinicalAI {
   private closed = false;
-  private activeContext?: {
-    stopCompletion(): Promise<void>;
-    release(): Promise<void>;
-  };
+  private context?: LlamaContext;
+  private contextPromise?: Promise<LlamaContext>;
+  private modelPromise?: Promise<string>;
+  private completing = false;
 
-  private async ensureModel(onStatus: (text: string) => void) {
+  private async installModel(onStatus: (text: string) => void) {
     const fs = await import("expo-file-system/legacy");
 
     if (!fs.documentDirectory)
@@ -156,6 +83,61 @@ export class LocalClinicalAI {
     return path;
   }
 
+  private ensureModel(onStatus: (text: string) => void) {
+    this.modelPromise ??= this.installModel(onStatus).catch((error) => {
+      this.modelPromise = undefined;
+      throw error;
+    });
+    return this.modelPromise;
+  }
+
+  private prepareContext(onStatus: (text: string) => void) {
+    if (this.context) return Promise.resolve(this.context);
+    if (this.contextPromise) return this.contextPromise;
+
+    this.contextPromise = this.ensureModel(onStatus)
+      .then(async (modelPath) => {
+        if (this.closed) throw new Error("Procesamiento cancelado.");
+        const { initLlama } = await import("llama.rn");
+        const context = await initLlama({
+          model: modelPath,
+          n_ctx: 1536,
+          n_batch: 256,
+          n_threads: 4,
+          n_gpu_layers: 0,
+          use_mlock: false,
+        });
+        if (this.closed) {
+          await context.release();
+          throw new Error("Procesamiento cancelado.");
+        }
+        this.context = context;
+        return context;
+      })
+      .finally(() => {
+        this.contextPromise = undefined;
+      });
+
+    return this.contextPromise;
+  }
+
+  async warmUp(onStatus: (text: string) => void = () => {}) {
+    if (!localClinicalAIAvailable || this.closed) return;
+    try {
+      await this.prepareContext(onStatus);
+    } finally {
+      onStatus("");
+    }
+  }
+
+  private async readyContext() {
+    const preparing = this.prepareContext(() => {}).catch(() => null);
+    return Promise.race([
+      preparing,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+    ]);
+  }
+
   async structure(
     transcript: string,
     onStatus: (text: string) => void = () => {},
@@ -171,76 +153,22 @@ export class LocalClinicalAI {
       );
 
     if (this.closed) throw new Error("Procesamiento cancelado.");
-
-    const modelPath = await this.ensureModel(onStatus);
-
-    if (this.closed) throw new Error("Procesamiento cancelado.");
-
-    onStatus("Cargando IA clínica en el teléfono…");
-
-    const { initLlama } = await import("llama.rn");
-
-    const context = await initLlama({
-      model: modelPath,
-      n_ctx: 2048,
-      n_batch: 256,
-      n_threads: 4,
-      n_gpu_layers: 0,
-      use_mlock: false,
-    });
-
-    this.activeContext = context;
+    const fallback = buildFastClinicalProposal(cleanTranscript);
+    onStatus("Preparando nota clínica…");
+    const context = await this.readyContext();
+    if (!context) {
+      onStatus("");
+      return fallback;
+    }
 
     try {
       if (this.closed) throw new Error("Procesamiento cancelado.");
-
-      onStatus("Preparando propuesta clínica local…");
-
+      this.completing = true;
       const result = await context.completion({
         messages: [
           {
             role: "system",
-            content: `Eres el módulo local de asistencia para documentación clínica de RAPICLINICS.
-
-Tu única fuente de información es la TRANSCRIPCIÓN proporcionada por el profesional de salud.
-
-OBJETIVO:
-Organizar y mejorar la redacción de información explícitamente presente en la transcripción para facilitar su revisión humana.
-
-REGLAS OBLIGATORIAS:
-- No inventes información.
-- No completes información ausente.
-- No hagas diagnósticos nuevos.
-- No sugieras tratamientos, medicamentos, dosis, estudios ni conductas no mencionadas.
-- No conviertas sospechas, posibilidades o preguntas en hechos confirmados.
-- Conserva exactamente el sentido de todas las negaciones.
-- Conserva medicamentos, dosis, unidades, vías, frecuencias, números, fechas, duraciones, resultados, lateralidad, antecedentes y alergias.
-- Nunca cambies un número, medicamento, dosis, unidad o fecha por otro.
-- Si un dato es ambiguo, contradictorio o incompleto, colócalo en uncertainties en lugar de resolverlo.
-- No infieras información usando conocimiento médico general.
-- No resuelvas referencias ambiguas si la transcripción no permite hacerlo con seguridad.
-
-SOURCE_SPAN:
-- Cada elemento debe incluir source_span.
-- source_span debe ser una copia literal y exacta de un fragmento existente en la transcripción.
-- No corrijas, resumas ni parafrasees source_span.
-
-EVOLUTION:
-- Incluye únicamente hechos clínicos explícitos relevantes.
-
-TASKS:
-- Incluye únicamente pendientes o acciones mencionados explícitamente.
-- No generes pendientes nuevos.
-
-UNCERTAINTIES:
-- Incluye datos ambiguos, contradictorios, incompletos o que requieran confirmación.
-- Ante la duda, usa uncertainties en lugar de asumir.
-
-SUGGESTED_EVOLUTION:
-Puedes mejorar puntuación, eliminar muletillas, reorganizar frases y mejorar claridad.
-No puedes añadir hechos, diagnósticos, conclusiones, recomendaciones ni información ausente.
-
-Toda salida es únicamente un borrador pendiente de revisión por el profesional.`,
+            content: `Mejora únicamente la puntuación, el orden y la cohesión de la transcripción clínica. Conserva todas las negaciones, medicamentos, dosis, vías, unidades, cifras, fechas y hechos. No agregues diagnósticos, tratamientos ni información. Devuelve solo el JSON solicitado.`,
           },
           {
             role: "user",
@@ -255,37 +183,42 @@ Toda salida es únicamente un borrador pendiente de revisión por el profesional
           },
         },
         enable_thinking: false,
-        temperature: 0.1,
-        n_predict: 420,
+        temperature: 0,
+        n_predict: 280,
       });
 
       if (this.closed) throw new Error("Procesamiento cancelado.");
 
-      let parsed: RawProposal;
-
       try {
-        parsed = JSON.parse(result.text) as RawProposal;
+        const parsed = parseJsonObject(result.text) as RawProposal;
+        const suggestion =
+          typeof parsed?.suggested_evolution === "string"
+            ? parsed.suggested_evolution.trim()
+            : "";
+        if (!isGroundedRedaction(suggestion, cleanTranscript)) return fallback;
+        return {
+          ...fallback,
+          suggested_evolution: suggestion,
+          redaction_method: "qwen3-0.6b-q4_k_m-fast-local-v2",
+        };
       } catch {
-        throw new Error("La IA local no produjo JSON válido.");
+        return fallback;
       }
-
-      return validateProposal(parsed, cleanTranscript);
+    } catch {
+      if (this.closed) throw new Error("Procesamiento cancelado.");
+      return fallback;
     } finally {
-      try {
-        await context.release();
-      } finally {
-        if (this.activeContext === context) this.activeContext = undefined;
-        onStatus("");
-      }
+      this.completing = false;
+      onStatus("");
     }
   }
 
   async dispose() {
     this.closed = true;
 
-    const context = this.activeContext;
-    if (!context) return;
-
-    await context.stopCompletion();
+    if (this.completing) await this.context?.stopCompletion();
+    await this.contextPromise?.catch(() => {});
+    await this.context?.release();
+    this.context = undefined;
   }
 }

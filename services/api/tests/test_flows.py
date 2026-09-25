@@ -286,19 +286,25 @@ def test_cross_unit_read_allowed_but_write_stays_restricted(client, context, db,
     assert patient.status_code == 200
 
     # Crear una visita sigue requiriendo contexto de escritura del servicio.
-    assert client.post(
-        "/visits",
-        json={"scan_id": context["scan_id"]},
-    ).status_code == 404
+    assert (
+        client.post(
+            "/visits",
+            json={"scan_id": context["scan_id"]},
+        ).status_code
+        == 404
+    )
 
     user.unit, user.role = "Medicina interna", "RECORDS_ADMIN"
     db.commit()
 
     # Un rol administrativo de registros tampoco adquiere permisos clínicos.
-    assert client.post(
-        "/visits",
-        json={"scan_id": context["scan_id"]},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/visits",
+            json={"scan_id": context["scan_id"]},
+        ).status_code
+        == 403
+    )
 
 
 def test_discharge_invalidates_context(client, context, db):
@@ -424,15 +430,15 @@ def test_local_structure_accepts_grounded_proposal(client, context):
     ).json()
     visit_id = visit["id"]
 
-    transcript = (
-        "Paciente niega dolor. "
-        "Pendiente: revisar hemograma mañana."
-    )
+    transcript = "Paciente niega dolor. Pendiente: revisar hemograma mañana."
 
-    assert client.patch(
-        f"/visits/{visit_id}/draft",
-        json={"transcript": transcript},
-    ).status_code == 200
+    assert (
+        client.patch(
+            f"/visits/{visit_id}/draft",
+            json={"transcript": transcript},
+        ).status_code
+        == 200
+    )
 
     proposal = {
         "evolution": [
@@ -449,7 +455,7 @@ def test_local_structure_accepts_grounded_proposal(client, context):
         ],
         "uncertainties": [],
         "suggested_evolution": transcript,
-        "redaction_method": "qwen3-1.7b-q4_k_m-local-v1",
+        "redaction_method": "qwen3-0.6b-q4_k_m-fast-local-v2",
     }
 
     response = client.post(
@@ -461,7 +467,7 @@ def test_local_structure_accepts_grounded_proposal(client, context):
 
     result = response.json()
     assert result["status"] == "REVIEW_REQUIRED"
-    assert result["note"]["redaction_method"] == "qwen3-1.7b-q4_k_m-local-v1"
+    assert result["note"]["redaction_method"] == "qwen3-0.6b-q4_k_m-fast-local-v2"
     assert result["note"]["evolution"][0]["requires_review"] is True
     assert result["note"]["tasks"][0]["requires_review"] is True
 
@@ -486,10 +492,13 @@ def test_local_structure_rejects_source_not_in_transcript(client, context):
 
     transcript = "Paciente niega dolor."
 
-    assert client.patch(
-        f"/visits/{visit_id}/draft",
-        json={"transcript": transcript},
-    ).status_code == 200
+    assert (
+        client.patch(
+            f"/visits/{visit_id}/draft",
+            json={"transcript": transcript},
+        ).status_code
+        == 200
+    )
 
     proposal = {
         "evolution": [
@@ -500,7 +509,7 @@ def test_local_structure_rejects_source_not_in_transcript(client, context):
         ],
         "tasks": [],
         "uncertainties": [],
-        "suggested_evolution": "Paciente presenta fiebre.",
+        "suggested_evolution": transcript,
         "redaction_method": "qwen3-1.7b-q4_k_m-local-v1",
     }
 
@@ -510,3 +519,12 @@ def test_local_structure_rejects_source_not_in_transcript(client, context):
     )
 
     assert response.status_code == 422
+    assert "referencia" in response.json()["detail"]
+
+    proposal["evolution"] = [
+        {"text": transcript, "source_span": transcript},
+    ]
+    proposal["suggested_evolution"] = "Paciente presenta fiebre."
+    response = client.post(f"/visits/{visit_id}/local-structure", json=proposal)
+    assert response.status_code == 422
+    assert "no está en la transcripción" in response.json()["detail"]

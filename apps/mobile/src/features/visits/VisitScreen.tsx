@@ -65,6 +65,15 @@ export function VisitScreen({
   const [localStatus, setLocalStatus] = useState("");
   const localActive = useRef(false);
   const mounted = useRef(true);
+  const warmClinicalAI = () => {
+    if (!localClinicalAIAvailable) return;
+    clinicalAI.current ??= new LocalClinicalAI();
+    void clinicalAI.current
+      .warmUp((text) => {
+        if (mounted.current) setLocalStatus(text);
+      })
+      .catch(() => {});
+  };
   const recording = localMode
     ? { isRecording: localRecording, durationMillis: localDuration }
     : serverRecording;
@@ -252,6 +261,7 @@ export function VisitScreen({
           setTranscript(text);
           setOriginalTranscript(text);
           markDirty();
+          warmClinicalAI();
         } finally {
           if (mounted.current) setLocalStatus("");
         }
@@ -274,6 +284,7 @@ export function VisitScreen({
       setTranscript(result.transcript);
       setOriginalTranscript(result.transcript);
       markDirty();
+      warmClinicalAI();
     });
   const saveDraft = useCallback(async () => {
     const revision = draftRevision.current;

@@ -10,19 +10,24 @@ from fastapi import HTTPException
 _inference = threading.Lock()
 
 MEDICAL_PROMPT = (
-    "Dictado médico de evolución clínica en español colombiano. Conserva negaciones, cifras, "
-    "decimales, fechas, dosis y unidades. Paciente niega, sin evidencia de, no presenta, signos "
-    "vitales, presión arterial, frecuencia cardíaca, frecuencia respiratoria, saturación de oxígeno, "
-    "temperatura, dolor, consciente, orientado, cefalea, disnea, náuseas, vómito, diuresis, balance "
-    "hídrico, hemoglobina, hematocrito, leucocitos, neutrófilos, linfocitos, plaquetas, creatinina, "
-    "BUN, glucosa, sodio, potasio, cloro, calcio, proteína C reactiva, INR, diagnóstico, tratamiento, "
-    "medicamento, dosis, miligramos, microgramos, mililitros, cada ocho horas, intravenoso, "
-    "intramuscular, subcutáneo, vía oral, alergias, pendiente, control y seguimiento."
+    "Dictado de evolución médica en español colombiano. Conserva negaciones, cifras, dosis y unidades. "
+    "Paciente niega, no presenta, sin evidencia de, antecedentes, alergias, examen físico, consciente, "
+    "alerta, orientado, Glasgow, hemodinámicamente estable, afebril, dolor, cefalea, disnea, edema, "
+    "diuresis, balance hídrico, presión arterial, TA, frecuencia cardíaca, FC, frecuencia respiratoria, "
+    "FR, saturación, SatO2, FiO2, murmullo vesicular, ruidos cardíacos, abdomen blando depresible, "
+    "hemoglobina, hematocrito, leucocitos, neutrófilos, linfocitos, plaquetas, creatinina, BUN, urea, "
+    "glucosa, sodio, potasio, proteína C reactiva, PCR, procalcitonina, INR, lactato, gases arteriales, "
+    "oxígeno por cánula nasal, acetaminofén, dipirona, ceftriaxona, piperacilina tazobactam, "
+    "vancomicina, enoxaparina, heparina, insulina, diagnóstico, tratamiento, pendiente, control, "
+    "intravenoso, intramuscular, subcutáneo y vía oral."
 )
 MEDICAL_HOTWORDS = (
-    "presión arterial frecuencia cardíaca frecuencia respiratoria saturación hemoglobina hematocrito "
-    "leucocitos neutrófilos linfocitos plaquetas creatinina BUN sodio potasio proteína C reactiva "
-    "intravenoso intramuscular subcutáneo alergias paciente niega no presenta"
+    "presión arterial TA frecuencia cardíaca FC frecuencia respiratoria FR saturación SatO2 FiO2 "
+    "Glasgow hemodinámicamente afebril murmullo vesicular ruidos cardíacos abdomen blando depresible "
+    "hemoglobina hematocrito leucocitos neutrófilos linfocitos plaquetas creatinina BUN urea sodio "
+    "potasio proteína C reactiva PCR procalcitonina INR lactato gases arteriales intravenoso "
+    "intramuscular subcutáneo oxígeno cánula nasal acetaminofén dipirona ceftriaxona piperacilina "
+    "tazobactam vancomicina enoxaparina heparina insulina alergias paciente niega no presenta sin evidencia"
 )
 
 

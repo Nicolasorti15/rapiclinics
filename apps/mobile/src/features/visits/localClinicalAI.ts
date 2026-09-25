@@ -11,13 +11,13 @@ export type LocalClinicalProposal = {
 };
 
 export class LocalClinicalAI {
+  async warmUp(_onStatus: (text: string) => void = () => {}): Promise<void> {}
+
   async structure(
     _transcript: string,
     _onStatus: (text: string) => void = () => {},
   ): Promise<LocalClinicalProposal> {
-    throw new Error(
-      "La IA clínica local requiere la app Android compilada.",
-    );
+    throw new Error("La IA clínica local requiere la app Android compilada.");
   }
 
   async dispose(): Promise<void> {}
