@@ -5,11 +5,10 @@ export const localClinicalAIAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 const MODEL_URL =
-  "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/f74f4773ef976969660897cd81122d9c1bb8ad7c/Qwen3-1.7B-Q4_K_M.gguf?download=true";
+  "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf?download=true";
 
-const MODEL_FILENAME = "qwen3-1.7b-q4_k_m.gguf";
-const MODEL_MIN_BYTES = 1_000_000_000;
-const MODEL_MAX_BYTES = 1_300_000_000;
+const MODEL_FILENAME = "qwen3-0.6b-q4_k_m.gguf";
+const MODEL_SIZE = 396705472;
 
 type RawItem = {
   text: string;
@@ -44,12 +43,7 @@ const itemSchema = {
 const proposalSchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "evolution",
-    "tasks",
-    "uncertainties",
-    "suggested_evolution",
-  ],
+  required: ["evolution", "tasks", "uncertainties", "suggested_evolution"],
   properties: {
     evolution: {
       type: "array",
@@ -102,18 +96,13 @@ function validateProposal(
     throw new Error("La IA local devolvió una estructura no válida.");
 
   return {
-    evolution: value.evolution.map((item) =>
-      validateItem(item, transcript),
-    ),
-    tasks: value.tasks.map((item) =>
-      validateItem(item, transcript),
-    ),
+    evolution: value.evolution.map((item) => validateItem(item, transcript)),
+    tasks: value.tasks.map((item) => validateItem(item, transcript)),
     uncertainties: value.uncertainties.map((item) =>
       validateItem(item, transcript),
     ),
-    suggested_evolution:
-      value.suggested_evolution.trim() || transcript.trim(),
-    redaction_method: "qwen3-1.7b-q4_k_m-local-v1",
+    suggested_evolution: value.suggested_evolution.trim() || transcript.trim(),
+    redaction_method: "qwen3-0.6b-q4_k_m-fast-local-v1",
   };
 }
 
@@ -133,13 +122,8 @@ export class LocalClinicalAI {
     const path = fs.documentDirectory + MODEL_FILENAME;
     const info = await fs.getInfoAsync(path);
 
-    if (
-      !info.exists ||
-      typeof info.size !== "number" ||
-      info.size < MODEL_MIN_BYTES ||
-      info.size > MODEL_MAX_BYTES
-    ) {
-      onStatus("Descargando IA clínica local (~1,1 GB)…");
+    if (!info.exists || info.size !== MODEL_SIZE) {
+      onStatus("Descargando IA clínica rápida (~397 MB)…");
 
       const partial = path + ".partial";
 
@@ -152,9 +136,7 @@ export class LocalClinicalAI {
         if (
           response.status !== 200 ||
           !downloaded.exists ||
-          typeof downloaded.size !== "number" ||
-          downloaded.size < MODEL_MIN_BYTES ||
-          downloaded.size > MODEL_MAX_BYTES
+          downloaded.size !== MODEL_SIZE
         )
           throw new Error(
             "La descarga del modelo quedó incompleta. Reintenta con una conexión estable.",
@@ -162,6 +144,9 @@ export class LocalClinicalAI {
 
         await fs.deleteAsync(path, { idempotent: true });
         await fs.moveAsync({ from: partial, to: path });
+        await fs.deleteAsync(fs.documentDirectory + "qwen3-1.7b-q4_k_m.gguf", {
+          idempotent: true,
+        });
       } catch (error) {
         await fs.deleteAsync(partial, { idempotent: true });
         throw error;
@@ -185,13 +170,11 @@ export class LocalClinicalAI {
         "La IA local requiere la app Android compilada; no funciona en Expo Go.",
       );
 
-    if (this.closed)
-      throw new Error("Procesamiento cancelado.");
+    if (this.closed) throw new Error("Procesamiento cancelado.");
 
     const modelPath = await this.ensureModel(onStatus);
 
-    if (this.closed)
-      throw new Error("Procesamiento cancelado.");
+    if (this.closed) throw new Error("Procesamiento cancelado.");
 
     onStatus("Cargando IA clínica en el teléfono…");
 
@@ -199,8 +182,9 @@ export class LocalClinicalAI {
 
     const context = await initLlama({
       model: modelPath,
-      n_ctx: 3072,
-      n_batch: 128,
+      n_ctx: 2048,
+      n_batch: 256,
+      n_threads: 4,
       n_gpu_layers: 0,
       use_mlock: false,
     });
@@ -208,8 +192,7 @@ export class LocalClinicalAI {
     this.activeContext = context;
 
     try {
-      if (this.closed)
-        throw new Error("Procesamiento cancelado.");
+      if (this.closed) throw new Error("Procesamiento cancelado.");
 
       onStatus("Preparando propuesta clínica local…");
 
@@ -273,11 +256,10 @@ Toda salida es únicamente un borrador pendiente de revisión por el profesional
         },
         enable_thinking: false,
         temperature: 0.1,
-        n_predict: 800,
+        n_predict: 420,
       });
 
-      if (this.closed)
-        throw new Error("Procesamiento cancelado.");
+      if (this.closed) throw new Error("Procesamiento cancelado.");
 
       let parsed: RawProposal;
 
@@ -292,8 +274,7 @@ Toda salida es únicamente un borrador pendiente de revisión por el profesional
       try {
         await context.release();
       } finally {
-        if (this.activeContext === context)
-          this.activeContext = undefined;
+        if (this.activeContext === context) this.activeContext = undefined;
         onStatus("");
       }
     }

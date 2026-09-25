@@ -21,7 +21,8 @@ def test_transcription_uses_medical_context(monkeypatch):
 
     assert speech.LocalSpeechToText().transcribe(b"audio") == "Presión arterial estable."
     assert calls["options"]["language"] == "es"
-    assert calls["options"]["beam_size"] == 5
+    assert calls["options"]["beam_size"] == 2
+    assert calls["options"]["best_of"] == 2
     assert "leucocitos" in calls["options"]["initial_prompt"]
     assert "creatinina" in calls["options"]["hotwords"]
 

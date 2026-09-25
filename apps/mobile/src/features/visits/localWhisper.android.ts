@@ -6,8 +6,8 @@ import { MEDICAL_TRANSCRIPTION_PROMPT } from "./medicalVocabulary";
 export const localWhisperAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 const MODEL_URL =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin";
-const MODEL_SIZE = 190085487;
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin";
+const MODEL_SIZE = 59707625;
 type Stream = {
   init(options: {
     sampleRate: number;
@@ -44,10 +44,10 @@ export class LocalWhisper {
     const fs = await import("expo-file-system/legacy");
     if (!fs.documentDirectory)
       throw new Error("No hay almacenamiento disponible para el modelo.");
-    const path = fs.documentDirectory + "whisper-small-q5-clinical.bin";
+    const path = fs.documentDirectory + "whisper-base-q5-fast.bin";
     const info = await fs.getInfoAsync(path);
     if (!info.exists || info.size !== MODEL_SIZE) {
-      onStatus("Descargando modelo clínico de alta precisión (190 MB)…");
+      onStatus("Descargando modelo clínico rápido (60 MB)…");
       const partial = path + ".partial";
       try {
         const response = await fs.downloadAsync(MODEL_URL, partial);
@@ -68,6 +68,10 @@ export class LocalWhisper {
         );
         await fs.deleteAsync(
           fs.documentDirectory + "whisper-base-multilingual.bin",
+          { idempotent: true },
+        );
+        await fs.deleteAsync(
+          fs.documentDirectory + "whisper-small-q5-clinical.bin",
           { idempotent: true },
         );
       } finally {
@@ -136,8 +140,8 @@ export class LocalWhisper {
         language: "es",
         translate: false,
         prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-        beamSize: 8,
-        bestOf: 8,
+        beamSize: 3,
+        bestOf: 3,
         temperature: 0,
       });
       const result = await this.job.promise;

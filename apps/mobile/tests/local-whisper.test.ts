@@ -44,7 +44,7 @@ vi.mock("whisper.rn/index", () => ({ initWhisper: mocks.whisperInit }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.info.mockResolvedValue({ exists: true, size: 190085487 });
+  mocks.info.mockResolvedValue({ exists: true, size: 59707625 });
   mocks.stop.mockResolvedValue(undefined);
   mocks.on.mockReturnValue({ remove: mocks.removeListener });
   mocks.whisperInit.mockResolvedValue({
@@ -84,8 +84,8 @@ it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish w
     language: "es",
     translate: false,
     prompt: MEDICAL_TRANSCRIPTION_PROMPT,
-    beamSize: 8,
-    bestOf: 8,
+    beamSize: 3,
+    bestOf: 3,
     temperature: 0,
   });
   expect(mocks.release).toHaveBeenCalledOnce();
@@ -147,16 +147,16 @@ it("does not start recording if the screen closes during model preparation", asy
 it("installs a complete model through a temporary file before opening the microphone", async () => {
   mocks.info
     .mockResolvedValueOnce({ exists: false })
-    .mockResolvedValueOnce({ exists: true, size: 190085487 });
+    .mockResolvedValueOnce({ exists: true, size: 59707625 });
   mocks.download.mockResolvedValue({ status: 200 });
   const local = new LocalWhisper();
   await start(local);
   expect(mocks.download.mock.calls[0][0]).toMatch(
-    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-small-q5_1.bin$/,
+    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-base-q5_1.bin$/,
   );
   expect(mocks.move).toHaveBeenCalledWith({
-    from: "file:///private/whisper-small-q5-clinical.bin.partial",
-    to: "file:///private/whisper-small-q5-clinical.bin",
+    from: "file:///private/whisper-base-q5-fast.bin.partial",
+    to: "file:///private/whisper-base-q5-fast.bin",
   });
   expect(mocks.removeFile).toHaveBeenCalledWith(
     "file:///private/whisper-tiny-multilingual.bin",
@@ -164,6 +164,10 @@ it("installs a complete model through a temporary file before opening the microp
   );
   expect(mocks.removeFile).toHaveBeenCalledWith(
     "file:///private/whisper-base-multilingual.bin",
+    { idempotent: true },
+  );
+  expect(mocks.removeFile).toHaveBeenCalledWith(
+    "file:///private/whisper-small-q5-clinical.bin",
     { idempotent: true },
   );
   expect(mocks.start).toHaveBeenCalledOnce();

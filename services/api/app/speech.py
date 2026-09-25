@@ -94,8 +94,8 @@ class LocalSpeechToText:
             segments, _ = model().transcribe(
                 audio,
                 language="es",
-                beam_size=5,
-                best_of=5,
+                beam_size=2,
+                best_of=2,
                 temperature=0,
                 vad_filter=True,
                 vad_parameters={"min_silence_duration_ms": 350, "speech_pad_ms": 250},
