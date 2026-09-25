@@ -9,6 +9,18 @@ from fastapi import HTTPException
 
 _inference = threading.Lock()
 
+MEDICAL_PROMPT = (
+    "Evolución clínica en español. Paciente, signos vitales, presión arterial, frecuencia cardíaca, "
+    "frecuencia respiratoria, saturación de oxígeno, temperatura, dolor, consciente, orientado, "
+    "cefalea, disnea, náuseas, vómito, diuresis, hemoglobina, hematocrito, leucocitos, neutrófilos, "
+    "plaquetas, creatinina, glucosa, sodio, potasio, diagnóstico, tratamiento, medicamento, dosis, "
+    "miligramos, intravenoso, vía oral, alergias, pendiente, control y seguimiento."
+)
+MEDICAL_HOTWORDS = (
+    "presión arterial frecuencia cardíaca frecuencia respiratoria saturación hemoglobina hematocrito "
+    "leucocitos neutrófilos plaquetas creatinina intravenoso alergias"
+)
+
 
 @lru_cache(maxsize=1)
 def model():
@@ -58,7 +70,16 @@ class LocalSpeechToText:
             raise HTTPException(503, "Hay otra transcripción en curso. Inténtalo en unos momentos.")
         try:
             segments, _ = model().transcribe(
-                audio, language="es", beam_size=5, vad_filter=True, condition_on_previous_text=False
+                audio,
+                language="es",
+                beam_size=5,
+                best_of=5,
+                temperature=0,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 350, "speech_pad_ms": 250},
+                condition_on_previous_text=False,
+                initial_prompt=MEDICAL_PROMPT,
+                hotwords=MEDICAL_HOTWORDS,
             )
             text = " ".join(segment.text.strip() for segment in segments).strip()
             if not text:

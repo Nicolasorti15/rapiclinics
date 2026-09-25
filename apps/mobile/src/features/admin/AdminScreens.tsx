@@ -21,6 +21,8 @@ import type { Patient, Routes, User } from "../../types";
 import { useAction, useAuth, useResource } from "../core";
 import { nfcAvailable, readBedToken } from "../nfc/reader";
 import { writePatientToken } from "../nfc/writer";
+import { BirthDatePicker } from "./BirthDatePicker";
+import { formatBirthDate, isValidBirthDate } from "./birthDate";
 
 export const isAdmin = (role?: string) =>
   role === "ADMIN" || role === "SYSTEM_ADMIN";
@@ -196,12 +198,9 @@ export function RegisterPatientScreen({
           keyboardType="number-pad"
           maxLength={15}
         />
-        <Field
-          label="Fecha de nacimiento · AAAA-MM-DD"
+        <BirthDatePicker
           value={form.birth_date}
-          onChangeText={(v) => set("birth_date", v)}
-          placeholder="1990-01-31"
-          maxLength={10}
+          onChange={(value) => set("birth_date", value)}
         />
         <Label>SEXO REGISTRADO</Label>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
@@ -235,7 +234,7 @@ export function RegisterPatientScreen({
         <Card>
           <Text style={s.subtitle}>{form.name}</Text>
           <Body>
-            CC {form.identifier} · {form.birth_date}
+            CC {form.identifier} · {formatBirthDate(form.birth_date)}
           </Body>
           <Body>
             {form.service} · Cama {form.bed_code}
@@ -268,7 +267,7 @@ export function RegisterPatientScreen({
               if (
                 form.name.trim().length < 3 ||
                 !/^\d{3,15}$/.test(form.identifier) ||
-                !/^\d{4}-\d{2}-\d{2}$/.test(form.birth_date) ||
+                !isValidBirthDate(form.birth_date) ||
                 !form.bed_code.trim()
               )
                 throw new Error(

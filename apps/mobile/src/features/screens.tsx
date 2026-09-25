@@ -26,6 +26,7 @@ import type { Patient, Routes, Scan, Task, Visit } from "../types";
 import { useAction, useAuth, useResource } from "./core";
 import { nfcAvailable, readBedToken, uidDemoEnabled } from "./nfc/reader";
 import { isAdmin } from "./admin/AdminScreens";
+import { formatBirthDate } from "./admin/birthDate";
 import { PatientDrafts } from "./visits/PatientDrafts";
 import { HomeBanner } from "./ads/HomeBanner";
 
@@ -522,7 +523,7 @@ export function ConfirmScreen({ route, navigation }: Props<"Confirm">) {
           {patient.identifier}
         </Text>
         <Text style={s.small}>
-          Nacimiento: {patient.birth_date} · {patient.sex}
+          Nacimiento: {formatBirthDate(patient.birth_date)} · {patient.sex}
         </Text>
         <Text style={s.small}>{patient.service}</Text>
       </Card>

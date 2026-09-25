@@ -1,12 +1,13 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { PcmCapture } from "./pcm";
 import type { WhisperContext } from "whisper.rn/index";
+import { MEDICAL_TRANSCRIPTION_PROMPT } from "./medicalVocabulary";
 
 export const localWhisperAvailable =
   Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 const MODEL_URL =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin";
-const MODEL_SIZE = 77691713;
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin";
+const MODEL_SIZE = 147951465;
 type Stream = {
   init(options: {
     sampleRate: number;
@@ -43,10 +44,10 @@ export class LocalWhisper {
     const fs = await import("expo-file-system/legacy");
     if (!fs.documentDirectory)
       throw new Error("No hay almacenamiento disponible para el modelo.");
-    const path = fs.documentDirectory + "whisper-tiny-multilingual.bin";
+    const path = fs.documentDirectory + "whisper-base-multilingual.bin";
     const info = await fs.getInfoAsync(path);
     if (!info.exists || info.size !== MODEL_SIZE) {
-      onStatus("Descargando modelo multilingüe (78 MB)…");
+      onStatus("Descargando modelo clínico mejorado (148 MB)…");
       const partial = path + ".partial";
       try {
         const response = await fs.downloadAsync(MODEL_URL, partial);
@@ -61,6 +62,10 @@ export class LocalWhisper {
           );
         await fs.deleteAsync(path, { idempotent: true });
         await fs.moveAsync({ from: partial, to: path });
+        await fs.deleteAsync(
+          fs.documentDirectory + "whisper-tiny-multilingual.bin",
+          { idempotent: true },
+        );
       } finally {
         await fs.deleteAsync(partial, { idempotent: true });
       }
@@ -125,6 +130,10 @@ export class LocalWhisper {
       this.job = context.transcribeData(data, {
         language: "es",
         translate: false,
+        prompt: MEDICAL_TRANSCRIPTION_PROMPT,
+        beamSize: 5,
+        bestOf: 5,
+        temperature: 0,
       });
       const result = await this.job.promise;
       if (result.isAborted || this.closed)

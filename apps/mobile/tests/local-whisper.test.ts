@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { LocalWhisper } from "../src/features/visits/localWhisper.android";
+import { MEDICAL_TRANSCRIPTION_PROMPT } from "../src/features/visits/medicalVocabulary";
 
 const mocks = vi.hoisted(() => ({
   info: vi.fn(),
@@ -43,7 +44,7 @@ vi.mock("whisper.rn/index", () => ({ initWhisper: mocks.whisperInit }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.info.mockResolvedValue({ exists: true, size: 77691713 });
+  mocks.info.mockResolvedValue({ exists: true, size: 147951465 });
   mocks.stop.mockResolvedValue(undefined);
   mocks.on.mockReturnValue({ remove: mocks.removeListener });
   mocks.whisperInit.mockResolvedValue({
@@ -73,12 +74,16 @@ it("uses a cached multilingual model offline and transcribes raw PCM16 Spanish w
       bitsPerSample: 16,
     }),
   );
-  expect(
-    Array.from(new Uint8Array(mocks.transcribe.mock.calls[0][0])),
-  ).toEqual([0, 64, 0, 128]);
+  expect(Array.from(new Uint8Array(mocks.transcribe.mock.calls[0][0]))).toEqual(
+    [0, 64, 0, 128],
+  );
   expect(mocks.transcribe.mock.calls[0][1]).toEqual({
     language: "es",
     translate: false,
+    prompt: MEDICAL_TRANSCRIPTION_PROMPT,
+    beamSize: 5,
+    bestOf: 5,
+    temperature: 0,
   });
   expect(mocks.release).toHaveBeenCalledOnce();
   expect(mocks.removeListener).toHaveBeenCalledOnce();
@@ -139,17 +144,21 @@ it("does not start recording if the screen closes during model preparation", asy
 it("installs a complete model through a temporary file before opening the microphone", async () => {
   mocks.info
     .mockResolvedValueOnce({ exists: false })
-    .mockResolvedValueOnce({ exists: true, size: 77691713 });
+    .mockResolvedValueOnce({ exists: true, size: 147951465 });
   mocks.download.mockResolvedValue({ status: 200 });
   const local = new LocalWhisper();
   await start(local);
   expect(mocks.download.mock.calls[0][0]).toMatch(
-    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-tiny.bin$/,
+    /5359861c739e955e79d9a303bcbc70fb988958b1\/ggml-base.bin$/,
   );
   expect(mocks.move).toHaveBeenCalledWith({
-    from: "file:///private/whisper-tiny-multilingual.bin.partial",
-    to: "file:///private/whisper-tiny-multilingual.bin",
+    from: "file:///private/whisper-base-multilingual.bin.partial",
+    to: "file:///private/whisper-base-multilingual.bin",
   });
+  expect(mocks.removeFile).toHaveBeenCalledWith(
+    "file:///private/whisper-tiny-multilingual.bin",
+    { idempotent: true },
+  );
   expect(mocks.start).toHaveBeenCalledOnce();
   await local.dispose();
 });

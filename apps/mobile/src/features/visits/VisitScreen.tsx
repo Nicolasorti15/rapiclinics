@@ -528,7 +528,7 @@ export function VisitScreen({
           <Notice
             text={
               localMode
-                ? "Whisper tiny multilingüe transcribe en español en este teléfono. La primera grabación descarga el modelo (78 MB); luego puedes dictar sin conexión hasta 3 minutos. Al guardar se envía solo texto. Revisa siempre el resultado."
+                ? "Whisper base multilingüe transcribe en español con contexto de vocabulario clínico. La primera grabación descarga el modelo (148 MB); luego puedes dictar sin conexión hasta 3 minutos. Al guardar se envía solo texto. Revisa siempre nombres, dosis, cifras y negaciones."
                 : "Modo servidor: al pulsar transcribir se sube el audio. Dicta hasta 3 minutos y revisa siempre el resultado."
             }
           />
