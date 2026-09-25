@@ -56,7 +56,7 @@ const config: ExpoConfig = {
   name: nfcUidDemo ? "RAPICLINICS NFC prueba" : "RAPICLINICS",
   slug: "rapiclinics",
   owner: "nicolasorti-team",
-  version: "1.4.0",
+  version: "1.5.0",
   runtimeVersion: { policy: "appVersion" },
   updates: {
     url: `https://u.expo.dev/${projectId}`,
@@ -71,7 +71,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: identifier,
-    buildNumber: "6",
+    buildNumber: "7",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription:
@@ -82,7 +82,7 @@ const config: ExpoConfig = {
   android: {
     allowBackup: false,
     package: identifier,
-    versionCode: 6,
+    versionCode: 7,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#176B70",
@@ -102,6 +102,13 @@ const config: ExpoConfig = {
     shortName: "RAPICLINICS",
   },
   plugins: [
+    [
+      "expo-notifications",
+      {
+        color: "#176B70",
+        defaultChannel: "urgent-tasks",
+      },
+    ],
     "./plugins/withPcmStop.cjs",
     "llama.rn",
     [

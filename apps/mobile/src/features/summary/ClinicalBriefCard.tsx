@@ -56,7 +56,9 @@ export function ClinicalBriefCard({ patientId }: { patientId: string }) {
             <View style={{ gap: 8 }}>
               <Text style={s.fieldLabel}>Pendientes abiertos</Text>
               {brief.data.open_tasks.slice(0, 4).map((item) => (
-                <Body key={item.id}>• {item.text}</Body>
+                <Body key={item.id}>
+                  • {item.urgent ? "URGENTE · " : ""}{item.text}
+                </Body>
               ))}
             </View>
           )}

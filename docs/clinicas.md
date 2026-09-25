@@ -10,6 +10,7 @@ La versión 1.1 incorpora cuentas por clínica, invitaciones para médicos, paci
 - Las invitaciones caducan en 24 horas y sirven una sola vez para el correo y rol indicados. Solo se almacena su hash. La persona establece una contraseña de al menos 8 caracteres, sin exigir símbolos ni mayúsculas en «Tengo una invitación». ADMIN comparte el código personalmente por un canal laboral; la app no envía correo ni afirma haber verificado automáticamente la titularidad del buzón.
 - Se puede exigir un dominio laboral exacto por clínica. En esta versión un correo pertenece a una única cuenta/clínica; membresías de un mismo médico en varias clínicas necesitan una ampliación del modelo.
 - Las contraseñas se guardan con Argon2. Desactivar a un integrante revoca sus sesiones y conserva los registros clínicos.
+- El personal clínico puede marcar pendientes abiertos como urgentes. La alerta del teléfono es genérica y no expone datos del paciente; cada dispositivo activa el permiso desde Mi cuenta. Consulta [notificaciones urgentes](notificaciones-urgentes.md).
 
 ## Pacientes y etiquetas
 

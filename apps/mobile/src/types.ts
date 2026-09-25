@@ -48,6 +48,7 @@ export type Task = {
   patient_name: string;
   description: string;
   status: "OPEN" | "DONE" | "CANCELLED";
+  urgent: boolean;
   due_at: string | null;
 };
 export type NoteItem = {
@@ -95,7 +96,7 @@ export type ClinicalBrief = {
     source_id: string;
     source_type: "patient" | "visit" | "document";
   }[];
-  open_tasks: { id: string; text: string; due_at: string | null }[];
+  open_tasks: { id: string; text: string; due_at: string | null; urgent: boolean }[];
   lab_trends: {
     date: string;
     value: number;

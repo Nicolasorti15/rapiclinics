@@ -12,6 +12,10 @@ import { useNetworkState } from "expo-network";
 import { api, handleExpiry, restoreSession, saveSession } from "../api/client";
 import type { Session } from "../types";
 import { Notice } from "../components/ui";
+import {
+  syncUrgentNotifications,
+  unregisterUrgentNotifications,
+} from "./notifications";
 
 const Auth = createContext<{
   session: Session | null;
@@ -41,6 +45,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       .catch(() => setSession(null))
       .finally(() => setReady(true));
   }, []);
+  useEffect(() => {
+    if (session) void syncUrgentNotifications(false).catch(() => {});
+  }, [session]);
   const login = async (email: string, password: string) => {
     const result = await api<Session>("/auth/login", "POST", {
       email,
@@ -51,6 +58,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
   const logout = async () => {
     try {
+      await unregisterUrgentNotifications().catch(() => {});
       await api("/auth/logout", "POST");
     } finally {
       await saveSession(null);

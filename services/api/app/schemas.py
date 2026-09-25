@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
@@ -55,7 +55,23 @@ class NoteReview(StrictModel):
 
 
 class TaskUpdate(StrictModel):
-    status: Literal["OPEN", "DONE", "CANCELLED"]
+    status: Literal["OPEN", "DONE", "CANCELLED"] | None = None
+    urgent: bool | None = None
+
+    @model_validator(mode="after")
+    def has_change(self):
+        if self.status is None and self.urgent is None:
+            raise ValueError("Indica el estado o la prioridad que deseas cambiar.")
+        return self
+
+
+class PushTokenRegistration(StrictModel):
+    token: str = Field(
+        min_length=20,
+        max_length=300,
+        pattern=r"^(?:ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$",
+    )
+    platform: Literal["android", "ios"]
 
 
 class DocumentValidation(StrictModel):

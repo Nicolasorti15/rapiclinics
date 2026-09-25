@@ -30,6 +30,7 @@ import { formatBirthDate } from "./admin/birthDate";
 import { PatientDrafts } from "./visits/PatientDrafts";
 import { HomeBanner } from "./ads/HomeBanner";
 import { ClinicalBriefCard } from "./summary/ClinicalBriefCard";
+import { syncUrgentNotifications } from "./notifications";
 
 type Props<T extends keyof Routes> = NativeStackScreenProps<Routes, T>;
 
@@ -788,6 +789,7 @@ function TaskList({
           <Label>SIN FECHA ASIGNADA</Label>
           {items.map((task) => (
             <Card key={task.id}>
+              {task.urgent && <Badge warn>URGENTE</Badge>}
               <View style={{ flexDirection: "row", gap: 12 }}>
                 <Pressable
                   accessibilityRole="checkbox"
@@ -819,6 +821,23 @@ function TaskList({
                   <Text style={s.small}>{task.patient_name}</Text>
                 </View>
               </View>
+              {!showDone && (
+                <Button
+                  title={task.urgent ? "Quitar prioridad urgente" : "Marcar como urgente"}
+                  secondary={!task.urgent}
+                  danger={task.urgent}
+                  icon="alert-triangle"
+                  disabled={action.busy}
+                  onPress={() =>
+                    action.run(async () => {
+                      await api(`/tasks/${task.id}`, "PATCH", {
+                        urgent: !task.urgent,
+                      });
+                      await reload();
+                    })
+                  }
+                />
+              )}
             </Card>
           ))}
         </>
@@ -865,6 +884,7 @@ export function HistoryScreen({ route }: Props<"History">) {
 export function SettingsScreen({ navigation }: Props<"Settings">) {
   const { session, logout } = useAuth();
   const action = useAction();
+  const [notificationMessage, setNotificationMessage] = useState("");
   return (
     <Page footer={<BottomNav navigation={navigation} active="Settings" />}>
       <Title>Tu cuenta</Title>
@@ -892,6 +912,32 @@ export function SettingsScreen({ navigation }: Props<"Settings">) {
         />
       )}
       <Card>
+        <Text style={s.subtitle}>Alertas de pendientes urgentes</Text>
+        <Body muted>
+          Recibe una alerta genérica cuando otra persona marque un pendiente
+          urgente de tu servicio. La notificación no muestra datos del paciente.
+        </Body>
+        <Button
+          title="Activar notificaciones"
+          secondary
+          icon="bell"
+          loading={action.busy}
+          onPress={() =>
+            action.run(async () => {
+              const status = await syncUrgentNotifications(true);
+              setNotificationMessage(
+                status === "enabled"
+                  ? "Notificaciones activadas en este teléfono."
+                  : status === "denied"
+                    ? "El permiso está desactivado. Puedes habilitarlo en los ajustes del teléfono."
+                    : "Las notificaciones requieren la app instalada en el teléfono.",
+              );
+            })
+          }
+        />
+        {Boolean(notificationMessage) && <Notice text={notificationMessage} />}
+      </Card>
+      <Card>
         <RowLink
           title="Privacidad y datos"
           detail="Acceso, almacenamiento y permisos"
@@ -899,7 +945,7 @@ export function SettingsScreen({ navigation }: Props<"Settings">) {
           onPress={() => navigation.navigate("Privacy")}
         />
         <Text style={s.small}>
-          RAPICLINICS · Versión 1.4.0{"\n"}
+          RAPICLINICS · Versión 1.5.0{"\n"}
           {session?.user.clinic_name}
         </Text>
       </Card>
@@ -946,8 +992,9 @@ export function PrivacyScreen() {
         <Text style={s.subtitle}>Permisos bajo tu control</Text>
         <Body>
           El micrófono se solicita al pulsar grabar. NFC se activa al iniciar
-          una lectura. Los documentos se eligen con el selector del sistema. No
-          se solicita acceso a contactos, ubicación ni biblioteca de fotos.
+          una lectura. Las notificaciones se activan desde Mi cuenta. Los
+          documentos se eligen con el selector del sistema. No se solicita
+          acceso a contactos, ubicación ni biblioteca de fotos.
         </Body>
         <Text style={s.subtitle}>Procesamiento del audio</Text>
         <Body>

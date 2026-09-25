@@ -86,6 +86,17 @@ class AuthSession(Base):
     revoked = Column(Boolean, default=False, nullable=False)
 
 
+class PushToken(Base):
+    __tablename__ = "push_tokens"
+    id = Column(String, primary_key=True, default=uid)
+    user_id = Column(ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False)
+    platform = Column(String, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(String, default=now, nullable=False)
+    updated_at = Column(String, default=now, nullable=False)
+
+
 class Patient(Base):
     __tablename__ = "patients"
     id = Column(String, primary_key=True, default=uid)
@@ -230,6 +241,7 @@ class Task(Base):
     visit_id = Column(ForeignKey("visits.id"))
     description = Column(Text, nullable=False)
     status = Column(String, default="OPEN", nullable=False)
+    urgent = Column(Boolean, default=False, nullable=False)
     due_at = Column(String)
     created_at = Column(String, default=now, nullable=False)
     completed_at = Column(String)

@@ -4,7 +4,7 @@ import config from "../app.config";
 
 describe("EAS Update configuration", () => {
   it("pins OTA updates to the native app version and owned Expo project", () => {
-    expect(config.version).toBe("1.4.0");
+    expect(config.version).toBe("1.5.0");
     expect(config.runtimeVersion).toEqual({ policy: "appVersion" });
     expect(config.updates).toMatchObject({
       enabled: true,

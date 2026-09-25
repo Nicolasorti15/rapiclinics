@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 
 from argon2.exceptions import VerificationError
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from sqlalchemy import select, text, update
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from .models import (
     Extraction,
     LabReport,
     Patient,
+    PushToken,
     Scan,
     Tag,
     Task,
@@ -48,6 +49,7 @@ from .schemas import (
     NoteReview,
     Refresh,
     Resolve,
+    PushTokenRegistration,
     TaskUpdate,
 )
 from .security import (
@@ -68,6 +70,7 @@ from .security import (
 )
 from .storage import ObjectStorage
 from .speech import LocalSpeechToText
+from .notifications import send_urgent_notifications
 from .labs import router as labs_router
 from .administration import router as admin_router
 
@@ -271,6 +274,7 @@ def refresh(body: Refresh, db: Session = Depends(db_session)):
 def logout(request: Request, user=Depends(get_user), db: Session = Depends(db_session)):
     token = request.headers.get("Authorization", "").removeprefix("Bearer ")
     db.execute(update(AuthSession).where(AuthSession.token_hash == digest(token)).values(revoked=True))
+    db.execute(update(PushToken).where(PushToken.user_id == user.id).values(active=False, updated_at=now()))
     audit(db, user, "logout")
     db.commit()
     return {"ok": True}
@@ -421,7 +425,10 @@ def clinical_brief(patient_id: str, user=Depends(get_user), db: Session = Depend
             f"{len(reports)} informes de laboratorio y {len(tasks)} pendientes abiertos revisados."
         ),
         "key_points": key_points[:8],
-        "open_tasks": [{"id": task.id, "text": task.description, "due_at": task.due_at} for task in tasks],
+        "open_tasks": [
+            {"id": task.id, "text": task.description, "due_at": task.due_at, "urgent": task.urgent}
+            for task in tasks
+        ],
         "lab_trends": lab_trends,
     }
     audit(db, user, "clinical_brief_viewed", patient_id)
@@ -761,22 +768,83 @@ def tasks(patient_id: str | None = None, user=Depends(get_user), db: Session = D
         query = query.where(Encounter.service == user.unit)
     return [
         {**serialize(task), "patient_name": db.get(Patient, task.patient_id).name}
-        for task in db.scalars(query.order_by(Task.created_at.desc())).all()
+        for task in db.scalars(query.order_by(Task.urgent.desc(), Task.created_at.desc())).all()
     ]
 
 
 @app.patch("/tasks/{task_id}")
-def task_update(task_id: str, body: TaskUpdate, user=Depends(get_user), db: Session = Depends(db_session)):
+def task_update(
+    task_id: str,
+    body: TaskUpdate,
+    background_tasks: BackgroundTasks,
+    user=Depends(get_user),
+    db: Session = Depends(db_session),
+):
     require_role(user, CLINICAL_ROLES)
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(404, "Pendiente no encontrado.")
-    encounter_access(db, user, task.encounter_id)
-    task.status = body.status
-    task.completed_at = now() if body.status == "DONE" else None
-    audit(db, user, "task_updated", task.id, status=body.status)
+    encounter = encounter_access(db, user, task.encounter_id)
+    became_urgent = body.urgent is True and not task.urgent
+    if body.urgent is True and task.status != "OPEN":
+        raise HTTPException(409, "Solo puedes marcar como urgente un pendiente abierto.")
+    if body.status is not None:
+        task.status = body.status
+        task.completed_at = now() if body.status == "DONE" else None
+    if body.urgent is not None:
+        task.urgent = body.urgent
+    tokens = []
+    if became_urgent:
+        tokens = list(
+            db.scalars(
+                select(PushToken.token)
+                .join(User, PushToken.user_id == User.id)
+                .where(
+                    PushToken.active.is_(True),
+                    User.active.is_(True),
+                    User.clinic_id == user.clinic_id,
+                    User.id != user.id,
+                    or_(User.role.in_(ADMIN_ROLES), User.unit == encounter.service),
+                )
+            ).all()
+        )
+    audit(db, user, "task_updated", task.id, status=task.status, urgent=task.urgent)
     db.commit()
+    if tokens:
+        background_tasks.add_task(send_urgent_notifications, tokens)
     return serialize(task)
+
+
+@app.post("/notifications/register")
+def register_notifications(
+    body: PushTokenRegistration, user=Depends(get_user), db: Session = Depends(db_session)
+):
+    token = db.scalar(select(PushToken).where(PushToken.token == body.token))
+    if token:
+        token.user_id = user.id
+        token.platform = body.platform
+        token.active = True
+        token.updated_at = now()
+    else:
+        token = PushToken(user_id=user.id, token=body.token, platform=body.platform)
+        db.add(token)
+    audit(db, user, "push_registered")
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/notifications/unregister")
+def unregister_notifications(
+    body: PushTokenRegistration, user=Depends(get_user), db: Session = Depends(db_session)
+):
+    db.execute(
+        update(PushToken)
+        .where(PushToken.token == body.token, PushToken.user_id == user.id)
+        .values(active=False, updated_at=now())
+    )
+    audit(db, user, "push_unregistered")
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/patients/{patient_id}/timeline")

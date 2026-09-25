@@ -5,7 +5,7 @@ import pytest
 from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
-from app.models import Assignment, Audit, Document, Encounter, Scan, Tag, User
+from app.models import Assignment, Audit, Document, Encounter, PushToken, Scan, Tag, User
 from app.providers import ExtractiveDemoStructurer, identity_match
 from app.security import digest
 from app.seed import fixture_pdf, fixture_token
@@ -154,6 +154,56 @@ def test_tasks_filter_by_patient_and_preserve_other_patients(client, context):
         task for task in all_tasks if task["patient_id"] != patient_id
     ]
     assert client.get("/tasks", params={"patient_id": "missing"}).status_code == 404
+
+
+def test_urgent_task_notifies_same_service_without_clinical_content(
+    client, context, db, auth, monkeypatch
+):
+    current = db.get(User, auth["user"]["id"])
+    recipient = User(
+        clinic_id=current.clinic_id,
+        email="recipient@example.test",
+        name="Recipient",
+        role="NURSE",
+        unit=current.unit,
+        password_hash="unused",
+    )
+    db.add(recipient)
+    db.flush()
+    token = "ExponentPushToken[testrecipient123456789]"
+    db.add(PushToken(user_id=recipient.id, token=token, platform="android"))
+    db.commit()
+    sent = []
+    monkeypatch.setattr("app.main.send_urgent_notifications", lambda tokens: sent.extend(tokens))
+
+    task = client.get("/tasks").json()[0]
+    response = client.patch(f"/tasks/{task['id']}", json={"urgent": True})
+
+    assert response.status_code == 200
+    assert response.json()["urgent"] is True
+    assert sent == [token]
+    assert client.get("/tasks").json()[0]["urgent"] is True
+    assert client.patch(f"/tasks/{task['id']}", json={}).status_code == 422
+
+
+def test_device_push_registration_can_be_disabled(client, auth, db):
+    token = "ExponentPushToken[currentdevice123456789]"
+    assert (
+        client.post(
+            "/notifications/register", json={"token": token, "platform": "android"}
+        ).status_code
+        == 200
+    )
+    stored = db.scalar(select(PushToken).where(PushToken.token == token))
+    assert stored.user_id == auth["user"]["id"]
+    assert stored.active is True
+    assert (
+        client.post(
+            "/notifications/unregister", json={"token": token, "platform": "android"}
+        ).status_code
+        == 200
+    )
+    assert stored.active is False
 
 
 def test_audio_transcription_preserves_original(client, context, monkeypatch):
