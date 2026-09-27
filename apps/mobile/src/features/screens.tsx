@@ -40,21 +40,26 @@ function Logo({ large = false }: { large?: boolean }) {
       <View
         style={[
           styles.logo,
-          large && { width: 52, height: 52, borderRadius: 17 },
+          large && { width: 48, height: 48, borderRadius: 16 },
         ]}
       >
-        <Icon name="activity" color="white" size={large ? 30 : 23} />
+        <View style={styles.logoCrossHorizontal} />
+        <View style={styles.logoCrossVertical} />
+        <View style={styles.logoPulse} />
       </View>
-      <Text
-        style={{
-          color: c.ink,
-          fontSize: large ? 22 : 17,
-          fontWeight: "800",
-          letterSpacing: 1.6,
-        }}
-      >
-        RAPICLINICS
-      </Text>
+      <View>
+        <Text
+          style={{
+            color: c.ink,
+            fontSize: large ? 21 : 17,
+            fontWeight: "900",
+            letterSpacing: 0.4,
+          }}
+        >
+          RAPICLINICS
+        </Text>
+        <Text style={styles.wordmarkDetail}>RONDA CLÍNICA</Text>
+      </View>
     </View>
   );
 }
@@ -70,19 +75,31 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
   const [repeatPassword, setRepeatPassword] = useState("");
   return (
     <Page safeTop>
-      <View style={{ paddingTop: 26, paddingBottom: 12 }}>
+      <View style={{ paddingTop: 12, paddingBottom: 4 }}>
         <Logo large />
       </View>
-      <Badge>ACCESO DE LA CLÍNICA</Badge>
-      <View style={{ gap: 12 }}>
-        <Title>Más cerca del paciente.{"\n"}Todo en una ronda.</Title>
-        <Body muted>
-          Un espacio claro para registrar visitas y organizar el cuidado.
-        </Body>
+      <View style={styles.loginHero}>
+        <View style={styles.loginHeroTop}>
+          <Badge>ENTORNO CLÍNICO</Badge>
+          <Icon name="shield" color="#CDEDE6" size={22} />
+        </View>
+        <Text style={styles.loginHeroTitle}>
+          La ronda comienza{"\n"}con contexto.
+        </Text>
+        <Text style={styles.loginHeroBody}>
+          Paciente, evolución y pendientes en una vista hecha para moverse con
+          el equipo.
+        </Text>
+        <View style={styles.loginSignal}>
+          <View style={styles.signalDot} />
+          <Text style={styles.signalText}>
+            Identidad confirmada · Datos protegidos
+          </Text>
+        </View>
       </View>
-      <Card>
+      <Card style={styles.loginCard}>
         <Text style={s.subtitle}>
-          {register ? "Crear cuenta de médico" : "Te damos la bienvenida"}
+          {register ? "Aceptar invitación" : "Acceso del equipo"}
         </Text>
         {register && (
           <>
@@ -158,13 +175,6 @@ export function LoginScreen({ onPrivacy }: { onPrivacy: () => void }) {
           tu clínica.
         </Text>
       </Card>
-      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 8 }}>
-        <Icon name="shield" size={20} />
-        <Text style={[s.small, { flex: 1 }]}>
-          Cada cuenta accede solo a su clínica y servicio autorizado. La
-          administración de usuarios depende de tu clínica.
-        </Text>
-      </View>
       <Pressable
         onPress={onPrivacy}
         accessibilityRole="button"
@@ -203,16 +213,17 @@ function BottomNav({
           accessibilityRole="tab"
           accessibilityState={{ selected: active === tab.name }}
           onPress={() => navigation.navigate(tab.name)}
-          style={styles.tab}
+          style={[styles.tab, active === tab.name && styles.tabActive]}
         >
           <Icon
             name={tab.icon}
-            color={active === tab.name ? c.teal : c.muted}
+            color={active === tab.name ? c.white : c.muted}
+            size={20}
           />
           <Text
             style={{
               fontSize: 11,
-              color: active === tab.name ? c.teal : c.muted,
+              color: active === tab.name ? c.white : c.muted,
               fontWeight: active === tab.name ? "700" : "400",
             }}
           >
@@ -237,32 +248,38 @@ export function HomeScreen({ navigation }: Props<"Home">) {
       ),
     );
   const pending = tasks.data?.filter((task) => task.status === "OPEN");
+  const urgent = pending?.filter((task) => task.urgent);
+  const firstName = session?.user.name
+    .replace(/^(Dra?\.?|Enf\.?|Dr\.?)[ ]*/i, "")
+    .split(" ")[0];
+  const initials = session?.user.name
+    .split(" ")
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
   return (
     <Page safeTop footer={<BottomNav navigation={navigation} active="Home" />}>
       <View style={styles.between}>
         <Logo />
-        <Badge>
-          {session?.user.clinic_id === "demo"
-            ? "DEMO"
-            : session?.user.clinic_name || "CLÍNICA"}
-        </Badge>
+        <View style={styles.profileChip}>
+          <Text style={styles.profileInitials}>{initials}</Text>
+        </View>
       </View>
-      <View style={{ gap: 8, marginTop: 8 }}>
-        <Label>TU ESPACIO DE RONDA</Label>
-        <Title>
-          Hola, {session?.user.name.replace("Dra. ", "").split(" ")[0]}.
-        </Title>
-        <Body muted>Menos pasos. Más tiempo para cuidar.</Body>
+      <View style={{ gap: 5, marginTop: 4 }}>
+        <Text style={styles.greeting}>Buen turno, {firstName}.</Text>
+        <Text style={styles.clinicLine}>{session?.user.clinic_name}</Text>
       </View>
       <View style={styles.hero}>
         <View style={styles.between}>
-          <View style={styles.heroIcon}>
-            <Icon name="radio" color="white" size={27} />
+          <View style={styles.livePill}>
+            <View style={styles.liveDot} />
+            <Text style={styles.heroLabel}>RONDA DISPONIBLE</Text>
           </View>
-          <Text style={styles.heroLabel}>IDENTIFICACIÓN SEGURA</Text>
+          <Icon name="activity" color="#BCE8DF" size={24} />
         </View>
         <Text style={styles.heroTitle}>
-          Tu próxima visita{"\n"}empieza aquí.
+          Identifica. Confirma.{"\n"}Continúa el cuidado.
         </Text>
         <Text style={styles.heroBody}>
           {nfcAvailable
@@ -274,43 +291,69 @@ export function HomeScreen({ navigation }: Props<"Home">) {
           onPress={() => navigation.navigate("Scan")}
           style={styles.heroButton}
         >
-          <Text style={{ color: c.teal, fontSize: 16, fontWeight: "700" }}>
-            Iniciar ronda
+          <Text style={{ color: c.tealDark, fontSize: 15, fontWeight: "800" }}>
+            Identificar paciente
           </Text>
-          <Icon name="arrow-up-right" size={21} />
+          <View style={styles.heroButtonIcon}>
+            <Icon name="arrow-right" size={18} color={c.white} />
+          </View>
         </Pressable>
       </View>
-      {isAdmin(session?.user.role) && (
-        <Button
-          title="Administrar clínica"
-          icon="settings"
-          secondary
-          onPress={() => navigation.navigate("Admin")}
-        />
-      )}
-      <View style={styles.stats}>
+      <View style={styles.quickGrid}>
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Patients")}
-          style={styles.stat}
+          style={styles.quickAction}
         >
-          <Text style={styles.statNumber}>{patients.data?.length ?? "—"}</Text>
-          <Text style={s.small}>Pacientes asignados</Text>
+          <View style={styles.quickIcon}>
+            <Icon name="search" size={19} />
+          </View>
+          <Text style={styles.quickTitle}>Buscar paciente</Text>
+          <Text style={s.small}>Nombre, cédula o cama</Text>
         </Pressable>
-        <View
-          style={{ width: 1, backgroundColor: c.line, marginVertical: 16 }}
-        />
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Tasks")}
-          style={styles.stat}
+          style={[
+            styles.quickAction,
+            urgent?.length ? styles.quickUrgent : null,
+          ]}
         >
-          <Text style={styles.statNumber}>{pending?.length ?? "—"}</Text>
-          <Text style={s.small}>Pendientes de ronda</Text>
+          <View style={styles.quickIcon}>
+            <Icon
+              name="alert-circle"
+              size={19}
+              color={urgent?.length ? c.danger : c.teal}
+            />
+          </View>
+          <Text style={styles.quickTitle}>{urgent?.length ?? 0} urgentes</Text>
+          <Text style={s.small}>
+            {pending?.length ?? "—"} pendientes abiertos
+          </Text>
         </Pressable>
       </View>
+      {isAdmin(session?.user.role) && (
+        <Pressable
+          style={styles.adminStrip}
+          onPress={() => navigation.navigate("Admin")}
+        >
+          <View style={styles.adminStripIcon}>
+            <Icon name="sliders" size={18} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.subtitle}>Centro de administración</Text>
+            <Text style={s.small}>Equipo, pacientes y etiquetas NFC</Text>
+          </View>
+          <Icon name="chevron-right" size={18} color={c.muted} />
+        </Pressable>
+      )}
       <View style={styles.between}>
-        <Text style={s.subtitle}>En tu servicio</Text>
+        <View>
+          <Text style={s.subtitle}>Pacientes activos</Text>
+          <Text style={s.small}>
+            {patients.data?.length ?? "—"} en la clínica
+          </Text>
+        </View>
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Patients")}
@@ -327,17 +370,14 @@ export function HomeScreen({ navigation }: Props<"Home">) {
       {patients.loading ? (
         <Loading />
       ) : (
-        <Card style={{ paddingVertical: 6 }}>
-          {patients.data?.slice(0, 3).map((patient, index) => (
+        <View style={{ gap: 10 }}>
+          {patients.data?.slice(0, 3).map((patient) => (
             <Pressable
               key={patient.id}
               accessibilityRole="button"
               disabled={action.busy}
               onPress={() => open(patient.id)}
-              style={[
-                styles.patientRow,
-                index > 0 && { borderTopWidth: 1, borderTopColor: c.line },
-              ]}
+              style={[styles.patientRow]}
             >
               <View style={styles.bed}>
                 <Text
@@ -353,7 +393,7 @@ export function HomeScreen({ navigation }: Props<"Home">) {
               <Icon name="chevron-right" size={18} color={c.muted} />
             </Pressable>
           ))}
-        </Card>
+        </View>
       )}
       <View style={{ flexDirection: "row", gap: 8, justifyContent: "center" }}>
         <Icon name="lock" size={13} color={c.muted} />
@@ -376,12 +416,20 @@ export function PatientsScreen({ navigation }: Props<"Patients">) {
   );
   return (
     <Page footer={<BottomNav navigation={navigation} active="Patients" />}>
-      <View style={{ gap: 8 }}>
-        <Label>{session?.user.clinic_name}</Label>
-        <Title>Pacientes de la clínica</Title>
+      <View style={styles.sectionIntro}>
+        <View style={styles.between}>
+          <View style={{ flex: 1, gap: 5 }}>
+            <Label>DIRECTORIO ACTIVO</Label>
+            <Title>Encuentra al paciente.</Title>
+          </View>
+          <View style={styles.countBadge}>
+            <Text style={styles.countNumber}>{data?.length ?? "—"}</Text>
+            <Text style={styles.countLabel}>ACTIVOS</Text>
+          </View>
+        </View>
         <Body muted>
-          Médicos, enfermería y administrativos pueden buscar por nombre,
-          cédula o habitación y confirmar la identidad antes de continuar.
+          Busca por nombre, cédula o habitación. Siempre confirmarás la
+          identidad antes de abrir la historia.
         </Body>
       </View>
       {isAdmin(session?.user.role) && (
@@ -559,9 +607,13 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
   const action = useAction();
   const [confirmDischarge, setConfirmDischarge] = useState(false);
   const [dischargedAt, setDischargedAt] = useState<string | null>(null);
-  const clinicalRole = ["STUDENT", "INTERN", "RESIDENT", "PHYSICIAN", "NURSE"].includes(
-    session?.user.role || "",
-  );
+  const clinicalRole = [
+    "STUDENT",
+    "INTERN",
+    "RESIDENT",
+    "PHYSICIAN",
+    "NURSE",
+  ].includes(session?.user.role || "");
   const canWriteEvolution =
     session?.user.role === "SYSTEM_ADMIN" ||
     (clinicalRole && session?.user.unit === patient.service);
@@ -582,9 +634,16 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
     );
   return (
     <Page patient={patient}>
-      <View style={{ gap: 8 }}>
-        <Badge>IDENTIDAD CONFIRMADA</Badge>
-        <Title>Paciente actual</Title>
+      <View style={styles.patientContextHeader}>
+        <View style={styles.livePillLight}>
+          <View style={styles.confirmedDot} />
+          <Text style={styles.confirmedText}>IDENTIDAD CONFIRMADA</Text>
+        </View>
+        <Text style={styles.patientContextTitle}>Paciente actual</Text>
+        <Text style={styles.patientContextCopy}>
+          La cabecera con nombre, cama y servicio permanecerá visible durante la
+          atención.
+        </Text>
       </View>
       {canWriteEvolution && (
         <Button
@@ -594,7 +653,9 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
         />
       )}
       {clinicalRole && !canWriteEvolution && (
-        <Notice text={`Puedes consultar esta historia. Para registrar una evolución debes pertenecer al servicio ${patient.service}.`} />
+        <Notice
+          text={`Puedes consultar esta historia. Para registrar una evolución debes pertenecer al servicio ${patient.service}.`}
+        />
       )}
       {isAdmin(session?.user.role) && (
         <>
@@ -671,6 +732,13 @@ export function PatientScreen({ route, navigation }: Props<"Patient">) {
           />
         </>
       )}
+      <View style={styles.sectionHeading}>
+        <View>
+          <Text style={s.subtitle}>Historia y seguimiento</Text>
+          <Text style={s.small}>Todo el contexto clínico en un solo lugar</Text>
+        </View>
+        <Icon name="layers" size={20} color={c.teal} />
+      </View>
       <Card style={{ paddingVertical: 6 }}>
         <RowLink
           title="Documentos"
@@ -735,10 +803,36 @@ function TaskList({
         .toLocaleLowerCase("es")
         .includes(search.trim().toLocaleLowerCase("es")),
   );
+  const openCount = data?.filter((task) => task.status === "OPEN").length ?? 0;
+  const urgentCount =
+    data?.filter((task) => task.status === "OPEN" && task.urgent).length ?? 0;
   return (
     <Page patient={patient} footer={footer}>
-      <Label>EL SIGUIENTE PASO</Label>
-      <Title>Pendientes</Title>
+      <View style={styles.sectionIntro}>
+        <Label>EL SIGUIENTE PASO</Label>
+        <Title>Plan de la ronda.</Title>
+        <Body muted>
+          Prioriza lo urgente, completa acciones y deja visible lo que sigue.
+        </Body>
+        <View style={styles.taskSummary}>
+          <View style={styles.taskSummaryItem}>
+            <Text style={styles.taskSummaryNumber}>{openCount}</Text>
+            <Text style={s.small}>por completar</Text>
+          </View>
+          <View style={styles.taskSummaryDivider} />
+          <View style={styles.taskSummaryItem}>
+            <Text
+              style={[
+                styles.taskSummaryNumber,
+                urgentCount > 0 && { color: c.danger },
+              ]}
+            >
+              {urgentCount}
+            </Text>
+            <Text style={s.small}>urgentes</Text>
+          </View>
+        </View>
+      </View>
       <Field
         label="Buscar pendientes"
         placeholder={patient ? "Busca una tarea" : "Busca una tarea o paciente"}
@@ -823,7 +917,11 @@ function TaskList({
               </View>
               {!showDone && (
                 <Button
-                  title={task.urgent ? "Quitar prioridad urgente" : "Marcar como urgente"}
+                  title={
+                    task.urgent
+                      ? "Quitar prioridad urgente"
+                      : "Marcar como urgente"
+                  }
                   secondary={!task.urgent}
                   danger={task.urgent}
                   icon="alert-triangle"
@@ -1022,12 +1120,45 @@ export function PrivacyScreen() {
 
 const styles = StyleSheet.create({
   logo: {
-    width: 35,
-    height: 35,
+    width: 38,
+    height: 38,
     backgroundColor: c.teal,
-    borderRadius: 11,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  logoCrossHorizontal: {
+    position: "absolute",
+    width: 18,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: c.white,
+  },
+  logoCrossVertical: {
+    position: "absolute",
+    width: 5,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: c.white,
+  },
+  logoPulse: {
+    position: "absolute",
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#A9E6D8",
+    right: 4,
+    top: 4,
+    borderWidth: 2,
+    borderColor: c.teal,
+  },
+  wordmarkDetail: {
+    color: c.muted,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.8,
+    marginTop: 1,
   },
   between: {
     flexDirection: "row",
@@ -1035,74 +1166,288 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  hero: { backgroundColor: "#176B70", borderRadius: 24, padding: 25, gap: 19 },
-  heroIcon: {
-    width: 46,
-    height: 46,
-    backgroundColor: "#358087",
+  loginHero: {
+    backgroundColor: c.tealDark,
+    borderRadius: 30,
+    padding: 26,
+    gap: 18,
+    minHeight: 270,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+  loginHeroTop: {
+    position: "absolute",
+    top: 22,
+    left: 22,
+    right: 22,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  loginHeroTitle: {
+    color: c.white,
+    fontSize: 34,
+    lineHeight: 39,
+    fontWeight: "800",
+    letterSpacing: -1.2,
+  },
+  loginHeroBody: {
+    color: "#CEE8E2",
+    fontSize: 14,
+    lineHeight: 21,
+    maxWidth: 340,
+  },
+  loginSignal: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingTop: 4,
+  },
+  signalDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#8CE0C9",
+  },
+  signalText: { color: "#BFE0D9", fontSize: 11, fontWeight: "600" },
+  loginCard: {
+    marginTop: -38,
+    marginHorizontal: 10,
+    paddingTop: 24,
+  },
+  profileChip: {
+    width: 42,
+    height: 42,
     borderRadius: 15,
+    backgroundColor: c.ink,
     alignItems: "center",
     justifyContent: "center",
   },
+  profileInitials: { color: c.white, fontWeight: "800", fontSize: 13 },
+  greeting: {
+    color: c.ink,
+    fontSize: 27,
+    fontWeight: "800",
+    letterSpacing: -0.9,
+  },
+  clinicLine: { color: c.muted, fontSize: 13, fontWeight: "600" },
+  sectionIntro: {
+    gap: 12,
+    paddingBottom: 3,
+  },
+  countBadge: {
+    minWidth: 72,
+    minHeight: 72,
+    borderRadius: 24,
+    backgroundColor: c.ink,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  countNumber: { color: c.white, fontSize: 22, fontWeight: "900" },
+  countLabel: {
+    color: "#B9D9D2",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  hero: {
+    backgroundColor: c.tealDark,
+    borderRadius: 30,
+    padding: 24,
+    gap: 18,
+    shadowColor: c.tealDark,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.17,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  livePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 99,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#8CE0C9",
+  },
   heroLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#D9EFE9",
-    letterSpacing: 1.1,
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#D5EFE9",
+    letterSpacing: 1.2,
   },
   heroTitle: {
     color: c.white,
-    fontSize: 29,
-    fontWeight: "600",
-    lineHeight: 36,
-    letterSpacing: -0.5,
+    fontSize: 28,
+    fontWeight: "800",
+    lineHeight: 34,
+    letterSpacing: -0.8,
   },
-  heroBody: { fontSize: 15, color: "#E0F0ED", lineHeight: 24, maxWidth: 320 },
+  heroBody: { fontSize: 14, color: "#C7E4DE", lineHeight: 21, maxWidth: 330 },
   heroButton: {
-    padding: 16,
-    borderRadius: 12,
+    paddingLeft: 18,
+    paddingRight: 8,
+    paddingVertical: 8,
+    minHeight: 56,
+    borderRadius: 18,
     backgroundColor: c.white,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 4,
   },
-  stats: {
+  heroButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: c.teal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickGrid: {
     flexDirection: "row",
+    gap: 10,
+  },
+  quickAction: {
+    flex: 1,
+    minHeight: 142,
+    padding: 16,
+    gap: 7,
+    borderRadius: 22,
     backgroundColor: c.white,
     borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: 18,
+    borderColor: "#E0E9E5",
   },
-  stat: { flex: 1, padding: 20, gap: 4 },
-  statNumber: { fontSize: 28, fontWeight: "600", color: c.ink },
+  quickUrgent: { backgroundColor: "#FFF5F3", borderColor: "#F3D7D3" },
+  quickIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: c.pale,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  quickTitle: { color: c.ink, fontWeight: "800", fontSize: 15 },
+  adminStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 15,
+    borderRadius: 20,
+    backgroundColor: "#E5F1EE",
+  },
+  adminStripIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: c.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  patientContextHeader: {
+    backgroundColor: c.tealDark,
+    borderRadius: 26,
+    padding: 20,
+    gap: 10,
+  },
+  livePillLight: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: 99,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  confirmedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#8CE0C9",
+  },
+  confirmedText: {
+    color: "#D5EFE9",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  patientContextTitle: {
+    color: c.white,
+    fontSize: 27,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+  },
+  patientContextCopy: { color: "#C7E4DE", fontSize: 13, lineHeight: 19 },
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 3,
+  },
+  taskSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: c.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0E9E5",
+    paddingVertical: 15,
+  },
+  taskSummaryItem: { flex: 1, alignItems: "center", gap: 2 },
+  taskSummaryNumber: { color: c.ink, fontSize: 24, fontWeight: "900" },
+  taskSummaryDivider: { width: 1, height: 35, backgroundColor: c.line },
   patientRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 19,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: c.white,
+    borderWidth: 1,
+    borderColor: "#E2EAE7",
   },
   bed: {
-    paddingHorizontal: 9,
-    paddingVertical: 12,
+    minWidth: 52,
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 13,
     backgroundColor: c.pale,
-    borderRadius: 11,
+    borderRadius: 15,
   },
   tabs: {
     flexDirection: "row",
     backgroundColor: c.white,
-    borderTopWidth: 1,
-    borderTopColor: c.line,
-    paddingVertical: 9,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    padding: 7,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#E0E8E5",
+    shadowColor: "#173D3A",
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 5,
   },
   tab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 6,
-    minHeight: 52,
+    gap: 4,
+    paddingVertical: 8,
+    minHeight: 54,
+    borderRadius: 18,
   },
+  tabActive: { backgroundColor: c.tealDark },
   scanVisual: { alignItems: "center", justifyContent: "center", padding: 15 },
   scanRing: {
     width: 230,

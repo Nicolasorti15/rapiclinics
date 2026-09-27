@@ -75,8 +75,13 @@ function Root() {
         initialRouteName="Home"
         screenOptions={{
           headerShadowVisible: false,
-          headerTitleStyle: { fontSize: 16, fontWeight: "600" },
-          headerTintColor: c.teal,
+          headerStyle: { backgroundColor: c.bg },
+          headerTitleStyle: {
+            fontSize: 15,
+            fontWeight: "700",
+            color: c.ink,
+          },
+          headerTintColor: c.ink,
           headerBackButtonDisplayMode: "minimal",
           contentStyle: { backgroundColor: c.bg },
         }}
